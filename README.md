@@ -1,5 +1,7 @@
 # ProCameraX 📸
 
+[![Download APK](https://img.shields.github.com/badge/Download-APK-brightgreen.svg?style=for-the-badge&logo=android)](https://github.com/TejasRajan98/ProCameraX/releases)
+
 ProCameraX is a feature-rich, high-performance Android camera application built using **Jetpack Compose** and **CameraX**. Inspired by Google Camera (GCam), it features a premium dark theme and unlocks advanced hardware capabilities of Android devices.
 
 ---
@@ -29,6 +31,16 @@ ProCameraX is a feature-rich, high-performance Android camera application built 
   - Shows `30x` and `100x` pills if supported by hardware.
   - When zooming past `20x`, a dedicated aiming reticle and stability hud activates.
   - Holding the camera steady for 1.5 seconds activates **Zoom Lock** (turns indicator yellow) to stabilize the framing.
+
+---
+
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshots/photo_mode.png" width="35%" alt="Photo Mode" />
+  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="screenshots/video_mode.png" width="35%" alt="Video Mode" />
+</p>
 
 ---
 
