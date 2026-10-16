@@ -2,35 +2,39 @@
 
 [![Download APK](https://img.shields.github.com/badge/Download-APK-brightgreen.svg?style=for-the-badge&logo=android)](https://github.com/TejasRajan98/ProCameraX/releases)
 
-ProCameraX is a feature-rich, high-performance Android camera application built using **Jetpack Compose** and **CameraX**. Inspired by Google Camera (GCam), it features a premium dark theme and unlocks advanced hardware capabilities of Android devices.
+ProCameraX is a feature-rich, high-performance Android camera application built using **Jetpack Compose**, **CameraX 1.4**, and **Camera2Interop**. Inspired by Google Camera (GCam) and flagship Pro camera suites, it features a responsive dark UI and unlocks advanced hardware capabilities on Android devices.
 
 ---
 
 ## 🌟 Key Features
 
 ### 📸 Photo Mode
-- **Auto Night Mode (Night Sight)**: Continuously monitors ambient light levels using the device's light sensor. When lux drops below `10.0f`, it automatically switches the camera pipeline to utilize OEM Night Sight extensions (`ExtensionMode.NIGHT`).
-- **Hold Still Progress UX**: During Night Mode capture, a glassmorphic circular progress overlay is displayed showing processing percentage, letting users know exactly when they can move the device.
-- **Ultra HDR Support**: Captures and processes Ultra HDR photos on supported Android 14+ devices.
-- **Tap to Focus**: Tap anywhere on the preview to focus with an animated target focus ring.
-- **Default Flash Auto Mode**: Easy cycling between Flash Auto, On, and Off.
+- **Debounced Auto Night Mode (Night Sight)**: Continuously monitors ambient light levels using the device's light sensor with hysteresis (`< 7 lux` to activate, `> 15 lux` to deactivate, sustained for 1.5s) to prevent preview rebind stutters while switching to OEM Night Sight extensions (`ExtensionMode.NIGHT`).
+- **Hold Still Progress UX**: During Night Mode capture, a glassmorphic circular progress overlay displays processing percentage.
+- **Tap-to-Focus + Interactive EV Exposure Slider**: Tap anywhere on the viewfinder to focus and drag vertically on the sun slider to adjust exposure compensation (`EV`) in real time.
+- **Front Camera Screen Flash & Shutter Blink**: Automatically boosts screen brightness with a full-white screen flash for front-facing low-light selfies, plus tactile shutter flash feedback.
+- **Shutter Countdown Timer**: Built-in `OFF`, `3s`, and `10s` countdown timer with large visual overlay.
+- **Aspect Ratio Framing**: Switch between `4:3`, `16:9`, `1:1`, and `FULL` aspect ratios.
+- **Ultra HDR Support**: Captures and processes Ultra HDR (`JPEG_ULTRA_HDR`) photos on supported Android 14+ devices.
+
+### 🎛️ Pro Manual Mode
+- **Real-Time Camera2Interop Controls**: Adjust **White Balance (WB)**, **ISO** (`100`–`3200`), **Shutter Speed** (`1/4000s`–`1s`), **Exposure Compensation (EV)**, and **Manual Focus Distance** (`Macro` to `∞`) live via `Camera2CameraControl` without rebinding the camera session.
+- **Live Luminance Histogram**: Real-time 64-bin Y-plane luma histogram analyzer computed via `ImageAnalysis`.
 
 ### 🎥 Video Mode
-- **10-bit HDR Video**: Capture professional High Dynamic Range (HDR) videos using the HLG10 profile (HEVC format) on supported Android 13+ devices.
-- **True Viewfinder HDR Preview**: Employs `SurfaceView` (`PERFORMANCE` mode) and dynamically switches the Android window's color mode to `COLOR_MODE_HDR` so you see real-time HDR contrast directly in the preview.
-- **Video FPS Selector**: Force target capture rates (AUTO, 30 FPS, or 60 FPS) bound via Camera2Interop.
-- **HDR & 60 FPS Mutual Exclusion**: Prevent stream-binding failures by auto-coercing mutually exclusive capabilities.
-- **Video Stabilization**: Native preview and recording stabilization toggle.
-- **Torch Support**: Easy spotlight control during recording.
+- **10-bit HDR Video**: Capture High Dynamic Range (HDR) videos using the HLG10 profile (HEVC) on supported Android 13+ devices.
+- **True Viewfinder HDR Preview**: Dynamically switches the window color mode to `COLOR_MODE_HDR` for real-time HDR contrast in the preview.
+- **Live Recording Timer & Pause/Resume**: Displays an animated `MM:SS` recording timer pill and supports pausing and resuming active video recordings.
+- **Microphone Mute Toggle**: Easily toggle audio recording on or off before recording, with automatic permission safeguards.
+- **Video FPS & Quality Selector**: Switch between `SD`, `HD`, `FHD`, and `UHD` resolutions and `AUTO`, `30 FPS`, or `60 FPS` capture rates.
+- **HDR & 60 FPS Mutual Exclusion**: Prevents stream-binding failures by auto-coercing mutually exclusive capabilities.
+- **Video Stabilization & Torch**: Native preview/video stabilization and spotlight control during recording.
 
-### 🔍 Advanced Zoom
-- **Quick Zoom Toggles**: Rapidly jump between `0.5x`, `1x`, `2x`, `5x`, and `10x` magnification.
-- **Pinch to Zoom**: Intuitive pinch gestures with a fading zoom level pill.
-- **Space Zoom HUD & Zoom Lock**:
-  - Automatically queries maximum zoom capabilities dynamically.
-  - Shows `30x` and `100x` pills if supported by hardware.
-  - When zooming past `20x`, a dedicated aiming reticle and stability hud activates.
-  - Holding the camera steady for 1.5 seconds activates **Zoom Lock** (turns indicator yellow) to stabilize the framing.
+### 🔍 Space Zoom & Composition Aids
+- **Quick Zoom Toggles & Pinch to Zoom**: Rapidly jump between `0.5x`, `1x`, `2x`, `5x`, `10x`, `30x`, and `100x` magnification with haptic detents.
+- **Gyroscope / Accelerometer Space Zoom Lock**: When zooming past `20x`, a targeting reticle with a stability progress arc tracks real device motion via hardware sensors—locking framing (`ZOOM LOCK ACTIVE`) when held steady for 1.5 seconds.
+- **3x3 Composition Grid & Horizon Leveler**: Rule-of-thirds overlay and gravity-sensor horizon leveler that turns green with a haptic tick at `0.0°`.
+- **Orientation-Responsive UI & Volume Key Shutter**: UI icons smoothly rotate (`0°`, `90°`, `180°`, `270°`) when shooting in landscape, and hardware Volume Up/Down keys act as physical shutter buttons.
 
 ---
 
@@ -50,23 +54,30 @@ ProCameraX is a feature-rich, high-performance Android camera application built 
 - **Android Studio Jellyfish** or higher
 - **Android SDK 34** (targetSdk)
 - **Minimum SDK 26** (Android 8.0)
-- **Device Support**: Certain features (e.g. 10-bit HDR, Night Sight extensions) require hardware capabilities. The app queries these dynamically and falls back to standard SDR/photo modes gracefully.
 
-### Compile
-To compile a debug build of the project:
+### Compile & Run Unit Tests
 ```bash
-./gradlew assembleDebug
+./gradlew compileDebugKotlin testDebugUnitTest
 ```
 
-### Install
-To build and install the debug app on a connected device:
+### Build Debug APK
 ```bash
-./gradlew installDebug
+./gradlew assembleDebug
 ```
 
 ---
 
 ## 📂 Project Structure
-- [MainActivity.kt](app/src/main/java/com/example/procamerax/MainActivity.kt): Entry point of the application.
-- [CameraViewModel.kt](app/src/main/java/com/example/procamerax/viewmodel/CameraViewModel.kt): Manages UI state, captures photos/videos, and handles state constraints.
-- [CameraScreen.kt](app/src/main/java/com/example/procamerax/ui/screens/CameraScreen.kt): Implements all viewfinder previews, gesture detection, sensor callbacks, and Jetpack Compose HUD layouts.
+- [MainActivity.kt](app/src/main/java/com/example/procamerax/MainActivity.kt): Entry point, runtime permission flow, and hardware volume-key shutter handling.
+- [CameraViewModel.kt](app/src/main/java/com/example/procamerax/viewmodel/CameraViewModel.kt): Manages camera state, Pro controls, timers, MediaStore queries, and capture pipelines.
+- [CameraScreen.kt](app/src/main/java/com/example/procamerax/ui/screens/CameraScreen.kt): Viewfinder lifecycle orchestration, Camera2Interop live control updates, and sensor listeners.
+- `ui/components/viewfinder/`:
+  - [FocusExposureOverlay.kt](app/src/main/java/com/example/procamerax/ui/components/viewfinder/FocusExposureOverlay.kt): Animated tap-to-focus ring and vertical EV slider.
+  - [GridAndLevelOverlay.kt](app/src/main/java/com/example/procamerax/ui/components/viewfinder/GridAndLevelOverlay.kt): 3x3 grid and gravity-sensor horizon leveler.
+- `ui/components/overlays/`:
+  - [SpaceZoomHud.kt](app/src/main/java/com/example/procamerax/ui/components/overlays/SpaceZoomHud.kt): Gyroscope/accelerometer stability lock reticle.
+  - [CameraOverlays.kt](app/src/main/java/com/example/procamerax/ui/components/overlays/CameraOverlays.kt): Recording timer pill, countdown timer, shutter flash, Night Sight status, and live luminance histogram.
+- `ui/components/controls/`:
+  - [TopBarControls.kt](app/src/main/java/com/example/procamerax/ui/components/controls/TopBarControls.kt): Orientation-aware utility bar and mode-specific pills.
+  - [ProManualControls.kt](app/src/main/java/com/example/procamerax/ui/components/controls/ProManualControls.kt): Interactive WB, ISO, Shutter Speed, EV, and Manual Focus dials.
+  - [BottomBarControls.kt](app/src/main/java/com/example/procamerax/ui/components/controls/BottomBarControls.kt): Zoom pills, gallery thumbnail, video pause/resume, morphing shutter button, and mode tabs.

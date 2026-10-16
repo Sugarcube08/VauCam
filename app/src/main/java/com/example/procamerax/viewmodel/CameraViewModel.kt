@@ -1,31 +1,44 @@
 package com.example.procamerax.viewmodel
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Application
+import android.content.ContentUris
 import android.content.ContentValues
+import android.content.pm.PackageManager
+import android.hardware.camera2.CameraMetadata
+import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
+import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
-import androidx.camera.video.FallbackStrategy
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
-enum class CameraMode {
-    PHOTO, VIDEO
+enum class CameraMode(val label: String) {
+    PHOTO("PHOTO"),
+    VIDEO("VIDEO"),
+    PRO("PRO")
 }
 
 enum class FpsMode(val value: Int?) {
@@ -34,11 +47,51 @@ enum class FpsMode(val value: Int?) {
     FPS_60(60)
 }
 
+enum class AspectRatioMode(val label: String, val ratioValue: Float?, val cameraXAspectRatio: Int) {
+    RATIO_4_3("4:3", 3f / 4f, AspectRatio.RATIO_4_3),
+    RATIO_16_9("16:9", 9f / 16f, AspectRatio.RATIO_16_9),
+    RATIO_1_1("1:1", 1f, AspectRatio.RATIO_4_3),
+    RATIO_FULL("FULL", null, AspectRatio.RATIO_16_9)
+}
+
+enum class TimerMode(val seconds: Int, val label: String) {
+    OFF(0, "OFF"),
+    SEC_3(3, "3s"),
+    SEC_10(10, "10s")
+}
+
+enum class WhiteBalanceMode(val label: String, val awbMode: Int) {
+    AUTO("AUTO", CameraMetadata.CONTROL_AWB_MODE_AUTO),
+    DAYLIGHT("DAY", CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT),
+    CLOUDY("CLOUDY", CameraMetadata.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT),
+    INCANDESCENT("TUNGSTEN", CameraMetadata.CONTROL_AWB_MODE_INCANDESCENT),
+    FLUORESCENT("FLUOR", CameraMetadata.CONTROL_AWB_MODE_FLUORESCENT),
+    SHADE("SHADE", CameraMetadata.CONTROL_AWB_MODE_SHADE)
+}
+
+data class ProShutterOption(val label: String, val exposureTimeNs: Long?)
+
+val PRO_ISO_OPTIONS = listOf<Int?>(null, 100, 200, 400, 800, 1600, 3200)
+
+val PRO_SHUTTER_OPTIONS = listOf(
+    ProShutterOption("AUTO", null),
+    ProShutterOption("1/4000", 250_000L),
+    ProShutterOption("1/1000", 1_000_000L),
+    ProShutterOption("1/250", 4_000_000L),
+    ProShutterOption("1/60", 16_666_667L),
+    ProShutterOption("1/15", 66_666_667L),
+    ProShutterOption("1/4", 250_000_000L),
+    ProShutterOption("1s", 1_000_000_000L)
+)
+
 data class CameraUiState(
     val lensFacing: Int = CameraSelector.LENS_FACING_BACK,
     val cameraMode: CameraMode = CameraMode.PHOTO,
     val isRecording: Boolean = false,
-    val zoomLevel: Float = 1f, // 0.5x, 1x, 5x
+    val isRecordingPaused: Boolean = false,
+    val recordingDurationSeconds: Long = 0L,
+    val isAudioEnabled: Boolean = true,
+    val zoomLevel: Float = 1f,
     val lastCapturedMediaUri: String? = null,
     val imageCaptureMode: Int = ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY,
     val isVideoStabilizationEnabled: Boolean = true,
@@ -49,7 +102,24 @@ data class CameraUiState(
     val isNightModeActive: Boolean = false,
     val photoCaptureProgress: Int? = null,
     val photoFlashMode: Int = ImageCapture.FLASH_MODE_AUTO,
-    val isTorchEnabled: Boolean = false
+    val isTorchEnabled: Boolean = false,
+    val aspectRatioMode: AspectRatioMode = AspectRatioMode.RATIO_4_3,
+    val timerMode: TimerMode = TimerMode.OFF,
+    val countdownSecondsRemaining: Int? = null,
+    val isGridEnabled: Boolean = false,
+    val isLevelerEnabled: Boolean = false,
+    val isHistogramEnabled: Boolean = true,
+    val exposureCompensationIndex: Int = 0,
+    val exposureCompensationRangeMin: Int = 0,
+    val exposureCompensationRangeMax: Int = 0,
+    val exposureCompensationStep: Float = 0.33f,
+    val proIso: Int? = null,
+    val proShutterSpeedNs: Long? = null,
+    val proWhiteBalance: WhiteBalanceMode = WhiteBalanceMode.AUTO,
+    val proFocusDistance: Float? = null,
+    val shutterFlashTrigger: Long = 0L,
+    val isScreenFlashActive: Boolean = false,
+    val histogramBins: List<Float> = List(64) { 0f }
 )
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,28 +130,108 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var imageCapture: ImageCapture? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
+    private var countdownJob: Job? = null
 
-    fun setImageCapture(capture: ImageCapture) {
+    init {
+        loadLatestMediaThumbnail()
+    }
+
+    fun setImageCapture(capture: ImageCapture?) {
         imageCapture = capture
     }
 
-    fun setVideoCapture(capture: VideoCapture<Recorder>) {
+    fun setVideoCapture(capture: VideoCapture<Recorder>?) {
         videoCapture = capture
     }
 
+    fun clearCameraReferences() {
+        imageCapture = null
+        videoCapture = null
+    }
+
+    fun loadLatestMediaThumbnail() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val resolver = getApplication<Application>().contentResolver
+                var latestUri: Uri? = null
+                var latestDateAdded = -1L
+
+                val projection = arrayOf(
+                    MediaStore.MediaColumns._ID,
+                    MediaStore.MediaColumns.DATE_ADDED
+                )
+                val sortOrder = "${MediaStore.MediaColumns.DATE_ADDED} DESC"
+
+                resolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    sortOrder
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(0)
+                        val dateAdded = cursor.getLong(1)
+                        latestDateAdded = dateAdded
+                        latestUri = ContentUris.withAppendedId(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        )
+                    }
+                }
+
+                resolver.query(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    null,
+                    null,
+                    sortOrder
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val id = cursor.getLong(0)
+                        val dateAdded = cursor.getLong(1)
+                        if (dateAdded > latestDateAdded) {
+                            latestUri = ContentUris.withAppendedId(
+                                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                                id
+                            )
+                        }
+                    }
+                }
+
+                latestUri?.let { uri ->
+                    _uiState.update { current ->
+                        if (current.lastCapturedMediaUri == null) {
+                            current.copy(lastCapturedMediaUri = uri.toString())
+                        } else {
+                            current
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fun toggleLens() {
+        if (uiState.value.isRecording) return
+        cancelCountdown()
         _uiState.update { current ->
             val newLens = if (current.lensFacing == CameraSelector.LENS_FACING_BACK) {
                 CameraSelector.LENS_FACING_FRONT
             } else {
                 CameraSelector.LENS_FACING_BACK
             }
-            current.copy(lensFacing = newLens)
+            current.copy(
+                lensFacing = newLens,
+                zoomLevel = 1f,
+                exposureCompensationIndex = 0
+            )
         }
     }
 
     fun setCameraMode(mode: CameraMode) {
         if (uiState.value.isRecording) return
+        cancelCountdown()
         _uiState.update { it.copy(cameraMode = mode) }
     }
 
@@ -119,9 +269,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun toggleAudioEnabled() {
+        if (uiState.value.isRecording) return
+        _uiState.update { it.copy(isAudioEnabled = !it.isAudioEnabled) }
+    }
+
     fun toggleAutoNightMode() {
         if (uiState.value.isRecording) return
-        _uiState.update { it.copy(isAutoNightModeEnabled = !it.isAutoNightModeEnabled) }
+        _uiState.update { current ->
+            val nextEnabled = !current.isAutoNightModeEnabled
+            current.copy(
+                isAutoNightModeEnabled = nextEnabled,
+                isNightModeActive = if (!nextEnabled) false else current.isNightModeActive
+            )
+        }
     }
 
     fun setNightModeActive(active: Boolean) {
@@ -144,59 +305,200 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(isTorchEnabled = !it.isTorchEnabled) }
     }
 
-    fun capturePhoto() {
-        val imageCapture = imageCapture ?: return
-        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ProCameraX")
+    fun cycleAspectRatio() {
+        if (uiState.value.isRecording) return
+        _uiState.update { current ->
+            val entries = AspectRatioMode.entries
+            val nextIndex = (entries.indexOf(current.aspectRatioMode) + 1) % entries.size
+            current.copy(aspectRatioMode = entries[nextIndex])
         }
-
-        val metadata = ImageCapture.Metadata().apply {
-            isReversedHorizontal = uiState.value.lensFacing == CameraSelector.LENS_FACING_FRONT
-        }
-
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(
-            getApplication<Application>().contentResolver,
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            contentValues
-        ).setMetadata(metadata).build()
-
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(getApplication()),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onError(exc: ImageCaptureException) {
-                    Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
-                    _uiState.update { it.copy(photoCaptureProgress = null) }
-                }
-
-                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val msg = "Photo capture succeeded: ${output.savedUri}"
-                    Log.d(TAG, msg)
-                    _uiState.update { it.copy(
-                        lastCapturedMediaUri = output.savedUri.toString(),
-                        photoCaptureProgress = null
-                    ) }
-                }
-
-                override fun onCaptureProcessProgressed(progress: Int) {
-                    _uiState.update { it.copy(photoCaptureProgress = progress) }
-                }
-            }
-        )
     }
 
+    fun cycleTimerMode() {
+        if (uiState.value.isRecording) return
+        cancelCountdown()
+        _uiState.update { current ->
+            val entries = TimerMode.entries
+            val nextIndex = (entries.indexOf(current.timerMode) + 1) % entries.size
+            current.copy(timerMode = entries[nextIndex])
+        }
+    }
+
+    fun toggleGrid() {
+        _uiState.update { it.copy(isGridEnabled = !it.isGridEnabled) }
+    }
+
+    fun toggleLeveler() {
+        _uiState.update { it.copy(isLevelerEnabled = !it.isLevelerEnabled) }
+    }
+
+    fun toggleHistogram() {
+        _uiState.update { it.copy(isHistogramEnabled = !it.isHistogramEnabled) }
+    }
+
+    fun updateExposureCapabilities(minIndex: Int, maxIndex: Int, step: Float) {
+        _uiState.update {
+            it.copy(
+                exposureCompensationRangeMin = minIndex,
+                exposureCompensationRangeMax = maxIndex,
+                exposureCompensationStep = step,
+                exposureCompensationIndex = it.exposureCompensationIndex.coerceIn(minIndex, maxIndex)
+            )
+        }
+    }
+
+    fun setExposureCompensationIndex(index: Int) {
+        _uiState.update { current ->
+            val coerced = index.coerceIn(current.exposureCompensationRangeMin, current.exposureCompensationRangeMax)
+            current.copy(exposureCompensationIndex = coerced)
+        }
+    }
+
+    fun setProIso(iso: Int?) {
+        _uiState.update { it.copy(proIso = iso) }
+    }
+
+    fun setProShutterSpeed(shutterNs: Long?) {
+        _uiState.update { it.copy(proShutterSpeedNs = shutterNs) }
+    }
+
+    fun setProWhiteBalance(wb: WhiteBalanceMode) {
+        _uiState.update { it.copy(proWhiteBalance = wb) }
+    }
+
+    fun setProFocusDistance(distance: Float?) {
+        _uiState.update { it.copy(proFocusDistance = distance) }
+    }
+
+    fun resetProControls() {
+        _uiState.update {
+            it.copy(
+                proIso = null,
+                proShutterSpeedNs = null,
+                proWhiteBalance = WhiteBalanceMode.AUTO,
+                proFocusDistance = null,
+                exposureCompensationIndex = 0
+            )
+        }
+    }
+
+    fun updateHistogramBins(bins: List<Float>) {
+        _uiState.update { it.copy(histogramBins = bins) }
+    }
+
+    fun onShutterTriggered() {
+        if (uiState.value.cameraMode == CameraMode.VIDEO) {
+            captureVideo()
+        } else {
+            triggerPhotoWithOptionalTimer()
+        }
+    }
+
+    private fun cancelCountdown() {
+        countdownJob?.cancel()
+        countdownJob = null
+        _uiState.update { it.copy(countdownSecondsRemaining = null) }
+    }
+
+    private fun triggerPhotoWithOptionalTimer() {
+        if (countdownJob?.isActive == true) {
+            cancelCountdown()
+            return
+        }
+        val seconds = uiState.value.timerMode.seconds
+        if (seconds <= 0) {
+            capturePhoto()
+        } else {
+            countdownJob = viewModelScope.launch {
+                for (remaining in seconds downTo 1) {
+                    _uiState.update { it.copy(countdownSecondsRemaining = remaining) }
+                    delay(1000L)
+                }
+                _uiState.update { it.copy(countdownSecondsRemaining = null) }
+                capturePhoto()
+            }
+        }
+    }
+
+    fun capturePhoto() {
+        val imageCapture = imageCapture ?: return
+        viewModelScope.launch {
+            val useScreenFlash = uiState.value.lensFacing == CameraSelector.LENS_FACING_FRONT &&
+                uiState.value.photoFlashMode != ImageCapture.FLASH_MODE_OFF
+
+            if (useScreenFlash) {
+                _uiState.update { it.copy(isScreenFlashActive = true) }
+                delay(180L)
+            } else {
+                _uiState.update { it.copy(shutterFlashTrigger = System.currentTimeMillis()) }
+            }
+
+            val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ProCameraX")
+            }
+
+            val metadata = ImageCapture.Metadata().apply {
+                isReversedHorizontal = uiState.value.lensFacing == CameraSelector.LENS_FACING_FRONT
+            }
+
+            val outputOptions = ImageCapture.OutputFileOptions.Builder(
+                getApplication<Application>().contentResolver,
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            ).setMetadata(metadata).build()
+
+            imageCapture.takePicture(
+                outputOptions,
+                ContextCompat.getMainExecutor(getApplication()),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onError(exc: ImageCaptureException) {
+                        Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
+                        _uiState.update {
+                            it.copy(
+                                photoCaptureProgress = null,
+                                isScreenFlashActive = false
+                            )
+                        }
+                    }
+
+                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                        val msg = "Photo capture succeeded: ${output.savedUri}"
+                        Log.d(TAG, msg)
+                        _uiState.update {
+                            it.copy(
+                                lastCapturedMediaUri = output.savedUri.toString(),
+                                photoCaptureProgress = null,
+                                isScreenFlashActive = false
+                            )
+                        }
+                    }
+
+                    override fun onCaptureProcessProgressed(progress: Int) {
+                        _uiState.update { it.copy(photoCaptureProgress = progress) }
+                    }
+                }
+            )
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     fun captureVideo() {
         val videoCapture = this.videoCapture ?: return
-        _uiState.update { it.copy(isRecording = true) }
 
         val curRecording = recording
         if (curRecording != null) {
             curRecording.stop()
             recording = null
-            _uiState.update { it.copy(isRecording = false) }
+            _uiState.update {
+                it.copy(
+                    isRecording = false,
+                    isRecordingPaused = false,
+                    recordingDurationSeconds = 0L
+                )
+            }
             return
         }
 
@@ -212,31 +514,78 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         ).setContentValues(contentValues).build()
 
+        val hasAudioPermission = ContextCompat.checkSelfPermission(
+            getApplication(),
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
         recording = videoCapture.output
             .prepareRecording(getApplication(), mediaStoreOutputOptions)
-            .withAudioEnabled()
+            .apply {
+                if (hasAudioPermission && uiState.value.isAudioEnabled) {
+                    withAudioEnabled()
+                }
+            }
             .start(ContextCompat.getMainExecutor(getApplication())) { recordEvent ->
-                when(recordEvent) {
+                when (recordEvent) {
                     is VideoRecordEvent.Start -> {
-                        _uiState.update { it.copy(isRecording = true) }
+                        _uiState.update {
+                            it.copy(
+                                isRecording = true,
+                                isRecordingPaused = false,
+                                recordingDurationSeconds = 0L
+                            )
+                        }
+                    }
+                    is VideoRecordEvent.Status -> {
+                        val seconds = TimeUnit.NANOSECONDS.toSeconds(
+                            recordEvent.recordingStats.recordedDurationNanos
+                        )
+                        _uiState.update { it.copy(recordingDurationSeconds = seconds) }
+                    }
+                    is VideoRecordEvent.Pause -> {
+                        _uiState.update { it.copy(isRecordingPaused = true) }
+                    }
+                    is VideoRecordEvent.Resume -> {
+                        _uiState.update { it.copy(isRecordingPaused = false) }
                     }
                     is VideoRecordEvent.Finalize -> {
                         if (!recordEvent.hasError()) {
                             val msg = "Video capture succeeded: ${recordEvent.outputResults.outputUri}"
                             Log.d(TAG, msg)
-                            _uiState.update { it.copy(
-                                lastCapturedMediaUri = recordEvent.outputResults.outputUri.toString(),
-                                isRecording = false
-                            ) }
+                            _uiState.update {
+                                it.copy(
+                                    lastCapturedMediaUri = recordEvent.outputResults.outputUri.toString(),
+                                    isRecording = false,
+                                    isRecordingPaused = false,
+                                    recordingDurationSeconds = 0L
+                                )
+                            }
                         } else {
                             recording?.close()
                             recording = null
                             Log.e(TAG, "Video capture ends with error: ${recordEvent.error}")
-                            _uiState.update { it.copy(isRecording = false) }
+                            _uiState.update {
+                                it.copy(
+                                    isRecording = false,
+                                    isRecordingPaused = false,
+                                    recordingDurationSeconds = 0L
+                                )
+                            }
                         }
                     }
                 }
             }
+    }
+
+    fun togglePauseResumeVideo() {
+        val curRecording = recording ?: return
+        if (!uiState.value.isRecording) return
+        if (uiState.value.isRecordingPaused) {
+            curRecording.resume()
+        } else {
+            curRecording.pause()
+        }
     }
 
     companion object {
