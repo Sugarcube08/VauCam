@@ -14,6 +14,7 @@ import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.util.Range
 import android.view.OrientationEventListener
 import android.view.Surface
@@ -99,13 +100,18 @@ import com.example.procamerax.ui.components.viewfinder.FocusExposureOverlay
 import com.example.procamerax.ui.components.viewfinder.GridAndLevelOverlay
 import com.example.procamerax.viewmodel.AspectRatioMode
 import com.example.procamerax.viewmodel.CameraMode
+import com.example.procamerax.viewmodel.CameraUiState
 import com.example.procamerax.viewmodel.CameraViewModel
 import com.example.procamerax.viewmodel.FpsMode
+import com.example.procamerax.viewmodel.WhiteBalanceMode
 import kotlinx.coroutines.delay
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.math.pow
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 @OptIn(ExperimentalCamera2Interop::class)
 @Composable
@@ -372,81 +378,23 @@ fun CameraScreen(
     // Real-time Camera2Interop Pro Controls (WB, ISO, Shutter Speed, Manual Focus) without rebinding!
     LaunchedEffect(
         cameraControl,
+        cameraInfo,
         uiState.cameraMode,
         uiState.proWhiteBalance,
         uiState.proIso,
         uiState.proShutterSpeedNs,
         uiState.proFocusDistance,
+        uiState.exposureCompensationIndex,
+        uiState.exposureCompensationStep,
         minFocusDistance
     ) {
         val control = cameraControl ?: return@LaunchedEffect
-        try {
-            val c2Control = Camera2CameraControl.from(control)
-            val optionsBuilder = CaptureRequestOptions.Builder()
-
-            if (uiState.cameraMode == CameraMode.PRO) {
-                optionsBuilder.setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AWB_MODE,
-                    uiState.proWhiteBalance.awbMode
-                )
-
-                if (uiState.proIso != null || uiState.proShutterSpeedNs != null) {
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.CONTROL_AE_MODE,
-                        CameraMetadata.CONTROL_AE_MODE_OFF
-                    )
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.SENSOR_SENSITIVITY,
-                        uiState.proIso ?: 400
-                    )
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.SENSOR_EXPOSURE_TIME,
-                        uiState.proShutterSpeedNs ?: 16_666_667L
-                    )
-                } else {
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.CONTROL_AE_MODE,
-                        CameraMetadata.CONTROL_AE_MODE_ON
-                    )
-                }
-
-                if (uiState.proFocusDistance != null && minFocusDistance > 0f) {
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.CONTROL_AF_MODE,
-                        CameraMetadata.CONTROL_AF_MODE_OFF
-                    )
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.LENS_FOCUS_DISTANCE,
-                        uiState.proFocusDistance!! * minFocusDistance
-                    )
-                } else {
-                    optionsBuilder.setCaptureRequestOption(
-                        CaptureRequest.CONTROL_AF_MODE,
-                        CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE
-                    )
-                }
-            } else {
-                optionsBuilder.setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AWB_MODE,
-                    CameraMetadata.CONTROL_AWB_MODE_AUTO
-                )
-                optionsBuilder.setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AE_MODE,
-                    CameraMetadata.CONTROL_AE_MODE_ON
-                )
-                optionsBuilder.setCaptureRequestOption(
-                    CaptureRequest.CONTROL_AF_MODE,
-                    if (uiState.cameraMode == CameraMode.VIDEO) {
-                        CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
-                    } else {
-                        CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE
-                    }
-                )
-            }
-            c2Control.setCaptureRequestOptions(optionsBuilder.build())
-        } catch (_: Exception) {
-            // Gracefully ignore unsupported Camera2 keys on restricted devices
-        }
+        applyProCaptureRequestOptions(
+            control = control,
+            info = cameraInfo,
+            uiState = uiState,
+            minFocusDistance = minFocusDistance
+        )
     }
 
     // Bind Camera Use Cases
@@ -510,9 +458,14 @@ fun CameraScreen(
             )
             .build()
 
+        // Enable preview stabilization only in VIDEO mode so 3-stream Pro mode (Preview + ImageCapture + ImageAnalysis)
+        // does not hit CameraX's 2-stream preview-stabilization surface combination limit on Pixel devices.
+        val isPreviewStabilizationActive =
+            uiState.cameraMode == CameraMode.VIDEO && uiState.isVideoStabilizationEnabled
+
         val previewBuilder = Preview.Builder()
             .setResolutionSelector(resolutionSelector)
-            .setPreviewStabilizationEnabled(uiState.isVideoStabilizationEnabled)
+            .setPreviewStabilizationEnabled(isPreviewStabilizationActive)
             .setDynamicRange(dynamicRange)
 
         if (uiState.cameraMode == CameraMode.VIDEO && uiState.videoFps != FpsMode.AUTO) {
@@ -545,7 +498,14 @@ fun CameraScreen(
                     .setCaptureMode(uiState.imageCaptureMode)
                     .setFlashMode(effectiveFlash)
 
-                if (isUltraHdrSupported && uiState.imageCaptureMode != ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG) {
+                // Ultra HDR (JPEG_R) in CameraX 1.4 only supports 2-surface combinations (Preview + ImageCapture)
+                // and cannot be combined with ImageAnalysis (Pro mode histogram) or CameraX Extensions.
+                val shouldEnableUltraHdr = isUltraHdrSupported &&
+                    uiState.cameraMode == CameraMode.PHOTO &&
+                    !shouldUseNightExtension &&
+                    uiState.imageCaptureMode != ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG
+
+                if (shouldEnableUltraHdr) {
                     builder.setOutputFormat(ImageCapture.OUTPUT_FORMAT_JPEG_ULTRA_HDR)
                     isUltraHdrActive = true
                 } else {
@@ -568,13 +528,23 @@ fun CameraScreen(
                                 }
                             )
                         }
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageCapture,
-                        imageAnalysis
-                    )
+                    try {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            imageCapture,
+                            imageAnalysis
+                        )
+                    } catch (_: IllegalArgumentException) {
+                        // Fallback if a legacy camera device cannot bind 3 simultaneous streams
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            imageCapture
+                        )
+                    }
                 } else {
                     cameraProvider.bindToLifecycle(
                         lifecycleOwner,
@@ -587,6 +557,7 @@ fun CameraScreen(
                 cameraControl = camera.cameraControl
                 cameraInfo = camera.cameraInfo
                 camera.cameraControl.setZoomRatio(uiState.zoomLevel)
+                camera.cameraControl.setExposureCompensationIndex(uiState.exposureCompensationIndex)
 
                 // Query Exposure & Focus capabilities
                 val expState = camera.cameraInfo.exposureState
@@ -595,10 +566,19 @@ fun CameraScreen(
                     maxIndex = expState.exposureCompensationRange.upper,
                     step = expState.exposureCompensationStep.toFloat()
                 )
-                minFocusDistance = runCatching {
+                val detectedMinFocus = runCatching {
                     Camera2CameraInfo.from(camera.cameraInfo)
                         .getCameraCharacteristic(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 10f
                 }.getOrDefault(10f)
+                minFocusDistance = detectedMinFocus
+
+                // Re-apply Camera2Interop Pro options after unbindAll/bindToLifecycle
+                applyProCaptureRequestOptions(
+                    control = camera.cameraControl,
+                    info = camera.cameraInfo,
+                    uiState = uiState,
+                    minFocusDistance = detectedMinFocus
+                )
             } else {
                 isUltraHdrActive = false
                 val recorder = Recorder.Builder()
@@ -633,12 +613,20 @@ fun CameraScreen(
                 cameraControl = camera.cameraControl
                 cameraInfo = camera.cameraInfo
                 camera.cameraControl.setZoomRatio(uiState.zoomLevel)
+                camera.cameraControl.setExposureCompensationIndex(uiState.exposureCompensationIndex)
 
                 val expState = camera.cameraInfo.exposureState
                 viewModel.updateExposureCapabilities(
                     minIndex = expState.exposureCompensationRange.lower,
                     maxIndex = expState.exposureCompensationRange.upper,
                     step = expState.exposureCompensationStep.toFloat()
+                )
+
+                applyProCaptureRequestOptions(
+                    control = camera.cameraControl,
+                    info = camera.cameraInfo,
+                    uiState = uiState,
+                    minFocusDistance = minFocusDistance
                 )
             }
         } catch (e: Exception) {
@@ -686,17 +674,27 @@ fun CameraScreen(
                                 }
                             }
                         }
-                        .pointerInput(cameraControl) {
+                        .pointerInput(
+                            cameraControl,
+                            uiState.cameraMode,
+                            uiState.proFocusDistance,
+                            uiState.proIso,
+                            uiState.proShutterSpeedNs
+                        ) {
                             detectTapGestures(
                                 onTap = { offset ->
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     val factory = previewView.meteringPointFactory
                                     val point = factory.createPoint(offset.x, offset.y)
-                                    val action = FocusMeteringAction.Builder(
-                                        point,
-                                        FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
-                                    ).build()
-                                    cameraControl?.startFocusAndMetering(action)
+                                    val isProMode = uiState.cameraMode == CameraMode.PRO
+                                    val useAf = !isProMode || uiState.proFocusDistance == null
+                                    val useAe = !isProMode || (uiState.proIso == null && uiState.proShutterSpeedNs == null)
+                                    val flags = (if (useAf) FocusMeteringAction.FLAG_AF else 0) or
+                                        (if (useAe) FocusMeteringAction.FLAG_AE else 0)
+                                    if (flags != 0) {
+                                        val action = FocusMeteringAction.Builder(point, flags).build()
+                                        cameraControl?.startFocusAndMetering(action)
+                                    }
                                     focusPoint = offset
                                 }
                             )
@@ -897,3 +895,114 @@ suspend fun Context.getExtensionsManager(cameraProvider: ProcessCameraProvider):
             continuation.resume(extensionsManagerFuture.get())
         }, ContextCompat.getMainExecutor(this))
     }
+
+@OptIn(ExperimentalCamera2Interop::class)
+private fun applyProCaptureRequestOptions(
+    control: CameraControl,
+    info: CameraInfo?,
+    uiState: CameraUiState,
+    minFocusDistance: Float
+) {
+    try {
+        val camera2Control = Camera2CameraControl.from(control)
+        val optionsBuilder = CaptureRequestOptions.Builder()
+
+        if (uiState.cameraMode == CameraMode.PRO) {
+            if (uiState.proWhiteBalance != WhiteBalanceMode.AUTO) {
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AWB_MODE,
+                    uiState.proWhiteBalance.awbMode
+                )
+            }
+
+            if (uiState.proIso != null || uiState.proShutterSpeedNs != null) {
+                val camera2Info = info?.let {
+                    try {
+                        Camera2CameraInfo.from(it)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                val isoRange = camera2Info?.getCameraCharacteristic(
+                    CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE
+                )
+                val exposureTimeRange = camera2Info?.getCameraCharacteristic(
+                    CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE
+                )
+                val maxFrameDuration = camera2Info?.getCameraCharacteristic(
+                    CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION
+                )
+
+                val evValue = (uiState.exposureCompensationIndex * uiState.exposureCompensationStep).toDouble()
+                val evMultiplier = 2.0.pow(evValue)
+
+                val rawIso = uiState.proIso ?: (400 * evMultiplier).roundToInt()
+                val rawShutterNs = uiState.proShutterSpeedNs
+                    ?: if (uiState.proIso != null) {
+                        (16_666_667L * evMultiplier).roundToLong()
+                    } else {
+                        16_666_667L
+                    }
+
+                val clampedIso = if (isoRange != null) {
+                    rawIso.coerceIn(isoRange.lower, isoRange.upper)
+                } else {
+                    rawIso.coerceIn(50, 100_000)
+                }
+
+                val clampedShutterNs = if (exposureTimeRange != null) {
+                    rawShutterNs.coerceIn(exposureTimeRange.lower, exposureTimeRange.upper)
+                } else {
+                    rawShutterNs.coerceIn(10_000L, 10_000_000_000L)
+                }
+
+                val targetFrameDuration = maxOf(clampedShutterNs, 33_333_333L).let { duration ->
+                    if (maxFrameDuration != null && maxFrameDuration > 0L) {
+                        duration.coerceAtMost(maxFrameDuration)
+                    } else {
+                        duration
+                    }
+                }
+
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AE_MODE,
+                    CameraMetadata.CONTROL_AE_MODE_OFF
+                )
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.FLASH_MODE,
+                    CameraMetadata.FLASH_MODE_OFF
+                )
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.SENSOR_SENSITIVITY,
+                    clampedIso
+                )
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.SENSOR_EXPOSURE_TIME,
+                    clampedShutterNs
+                )
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.SENSOR_FRAME_DURATION,
+                    targetFrameDuration
+                )
+            }
+
+            if (uiState.proFocusDistance != null && minFocusDistance > 0f) {
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_OFF
+                )
+                val targetFocusDiopters = (uiState.proFocusDistance * minFocusDistance)
+                    .coerceIn(0f, minFocusDistance)
+                optionsBuilder.setCaptureRequestOption(
+                    CaptureRequest.LENS_FOCUS_DISTANCE,
+                    targetFocusDiopters
+                )
+            }
+        }
+
+        camera2Control.setCaptureRequestOptions(optionsBuilder.build())
+    } catch (e: Exception) {
+        Log.e("CameraScreen", "Failed to apply Pro camera controls", e)
+    }
+}
+
