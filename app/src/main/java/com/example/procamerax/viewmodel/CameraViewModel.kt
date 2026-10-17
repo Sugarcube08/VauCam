@@ -123,6 +123,7 @@ data class CameraUiState(
     val proFocusDistance: Float? = null,
     val shutterFlashTrigger: Long = 0L,
     val isScreenFlashActive: Boolean = false,
+    val ambientLux: Float? = null,
     val histogramBins: List<Float> = List(64) { 0f }
 )
 
@@ -437,6 +438,26 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(histogramBins = bins) }
     }
 
+    fun updateAmbientLux(lux: Float) {
+        _uiState.update { it.copy(ambientLux = lux) }
+    }
+
+    internal fun shouldTriggerFrontScreenFlash(state: CameraUiState = uiState.value): Boolean {
+        if (state.lensFacing != CameraSelector.LENS_FACING_FRONT) return false
+        return when (state.photoFlashMode) {
+            ImageCapture.FLASH_MODE_ON -> true
+            ImageCapture.FLASH_MODE_AUTO -> {
+                val lux = state.ambientLux
+                if (lux != null) {
+                    lux < FRONT_AUTO_FLASH_LUX_THRESHOLD
+                } else {
+                    state.isNightModeActive
+                }
+            }
+            else -> false
+        }
+    }
+
     fun onShutterTriggered() {
         if (uiState.value.cameraMode == CameraMode.VIDEO) {
             captureVideo()
@@ -474,8 +495,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun capturePhoto() {
         val imageCapture = imageCapture ?: return
         viewModelScope.launch {
-            val useScreenFlash = uiState.value.lensFacing == CameraSelector.LENS_FACING_FRONT &&
-                uiState.value.photoFlashMode != ImageCapture.FLASH_MODE_OFF
+            val useScreenFlash = shouldTriggerFrontScreenFlash()
 
             if (useScreenFlash) {
                 _uiState.update { it.copy(isScreenFlashActive = true) }
@@ -645,5 +665,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         internal const val PREFS_NAME = "procamerax_preferences"
         internal const val KEY_BACK_FLASH_MODE = "pref_back_photo_flash_mode"
         internal const val KEY_FRONT_FLASH_MODE = "pref_front_photo_flash_mode"
+        internal const val FRONT_AUTO_FLASH_LUX_THRESHOLD = 20.0f
     }
 }

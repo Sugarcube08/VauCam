@@ -165,6 +165,33 @@ class CameraViewModelTest {
         assertEquals(ImageCapture.FLASH_MODE_ON, restartedVm.uiState.value.photoFlashMode)
     }
 
+    @Test
+    fun `front camera auto flash only triggers screen flash in low ambient light`() {
+        // Switch to front camera (defaults to FLASH_MODE_OFF)
+        viewModel.toggleLens()
+        assertEquals(CameraSelector.LENS_FACING_FRONT, viewModel.uiState.value.lensFacing)
+        assertEquals(ImageCapture.FLASH_MODE_OFF, viewModel.uiState.value.photoFlashMode)
+        assertFalse(viewModel.shouldTriggerFrontScreenFlash())
+
+        // Cycle to FLASH_MODE_AUTO
+        viewModel.cyclePhotoFlashMode()
+        assertEquals(ImageCapture.FLASH_MODE_AUTO, viewModel.uiState.value.photoFlashMode)
+
+        // Sufficient ambient light (e.g., 150 lux) -> should NOT flash screen
+        viewModel.updateAmbientLux(150f)
+        assertFalse(viewModel.shouldTriggerFrontScreenFlash())
+
+        // Low ambient light (e.g., 8 lux < 20 lux threshold) -> SHOULD flash screen
+        viewModel.updateAmbientLux(8f)
+        assertTrue(viewModel.shouldTriggerFrontScreenFlash())
+
+        // Cycle to FLASH_MODE_ON -> SHOULD flash screen even in bright light
+        viewModel.cyclePhotoFlashMode()
+        assertEquals(ImageCapture.FLASH_MODE_ON, viewModel.uiState.value.photoFlashMode)
+        viewModel.updateAmbientLux(300f)
+        assertTrue(viewModel.shouldTriggerFrontScreenFlash())
+    }
+
     private class InMemorySharedPreferences : SharedPreferences {
         private val map = mutableMapOf<String, Any?>()
 

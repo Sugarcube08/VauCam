@@ -240,8 +240,8 @@ fun CameraScreen(
         }
     }
 
-    // Debounced & Hysteresis Light Sensor for Auto Night Mode
-    // Activates below 7 lux sustained for 1.5s; deactivates above 15 lux sustained for 1.5s
+    // Ambient Light Sensor for Front Camera Auto Screen Flash & Auto Night Mode
+    // Auto Night Mode activates below 7 lux sustained for 1.5s; deactivates above 15 lux sustained for 1.5s
     val sensorManager = remember(context) {
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     }
@@ -250,18 +250,26 @@ fun CameraScreen(
     }
     var pendingNightModeTarget by remember { mutableStateOf<Boolean?>(null) }
 
-    DisposableEffect(uiState.isAutoNightModeEnabled, lightSensor, isNightExtensionAvailable) {
-        if (uiState.isAutoNightModeEnabled && lightSensor != null) {
+    DisposableEffect(lightSensor) {
+        if (lightSensor != null) {
             val listener = object : SensorEventListener {
                 override fun onSensorChanged(event: SensorEvent?) {
                     val lux = event?.values?.getOrNull(0) ?: return
-                    val currentlyActive = viewModel.uiState.value.isNightModeActive
-                    if (!currentlyActive && lux < 7.0f) {
-                        pendingNightModeTarget = true
-                    } else if (currentlyActive && lux > 15.0f) {
-                        pendingNightModeTarget = false
-                    } else if (lux in 7.0f..15.0f) {
-                        pendingNightModeTarget = null
+                    val currentState = viewModel.uiState.value
+                    // Ignore transient brightness spikes caused by the screen flash itself
+                    if (currentState.isScreenFlashActive) return
+
+                    viewModel.updateAmbientLux(lux)
+
+                    if (currentState.isAutoNightModeEnabled) {
+                        val currentlyActive = currentState.isNightModeActive
+                        if (!currentlyActive && lux < 7.0f) {
+                            pendingNightModeTarget = true
+                        } else if (currentlyActive && lux > 15.0f) {
+                            pendingNightModeTarget = false
+                        } else if (lux in 7.0f..15.0f) {
+                            pendingNightModeTarget = null
+                        }
                     }
                 }
 
@@ -272,9 +280,23 @@ fun CameraScreen(
                 sensorManager.unregisterListener(listener)
             }
         } else {
+            onDispose {}
+        }
+    }
+
+    LaunchedEffect(uiState.isAutoNightModeEnabled) {
+        if (!uiState.isAutoNightModeEnabled) {
             pendingNightModeTarget = null
             viewModel.setNightModeActive(false)
-            onDispose {}
+        } else {
+            val lux = uiState.ambientLux
+            if (lux != null) {
+                if (!uiState.isNightModeActive && lux < 7.0f) {
+                    pendingNightModeTarget = true
+                } else if (uiState.isNightModeActive && lux > 15.0f) {
+                    pendingNightModeTarget = false
+                }
+            }
         }
     }
 
