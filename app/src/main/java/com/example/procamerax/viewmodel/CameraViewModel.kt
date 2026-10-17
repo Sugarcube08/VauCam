@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ContentUris
 import android.content.ContentValues
+import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraMetadata
 import android.net.Uri
@@ -102,6 +104,8 @@ data class CameraUiState(
     val isNightModeActive: Boolean = false,
     val photoCaptureProgress: Int? = null,
     val photoFlashMode: Int = ImageCapture.FLASH_MODE_AUTO,
+    val backPhotoFlashMode: Int = ImageCapture.FLASH_MODE_AUTO,
+    val frontPhotoFlashMode: Int = ImageCapture.FLASH_MODE_OFF,
     val isTorchEnabled: Boolean = false,
     val aspectRatioMode: AspectRatioMode = AspectRatioMode.RATIO_4_3,
     val timerMode: TimerMode = TimerMode.OFF,
@@ -124,7 +128,26 @@ data class CameraUiState(
 
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _uiState = MutableStateFlow(CameraUiState())
+    private val prefs: SharedPreferences? = runCatching {
+        application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }.getOrNull()
+
+    private val initialBackFlashMode: Int = loadFlashMode(
+        key = KEY_BACK_FLASH_MODE,
+        defaultMode = ImageCapture.FLASH_MODE_AUTO
+    )
+    private val initialFrontFlashMode: Int = loadFlashMode(
+        key = KEY_FRONT_FLASH_MODE,
+        defaultMode = ImageCapture.FLASH_MODE_OFF
+    )
+
+    private val _uiState = MutableStateFlow(
+        CameraUiState(
+            photoFlashMode = initialBackFlashMode,
+            backPhotoFlashMode = initialBackFlashMode,
+            frontPhotoFlashMode = initialFrontFlashMode
+        )
+    )
     val uiState: StateFlow<CameraUiState> = _uiState.asStateFlow()
 
     private var imageCapture: ImageCapture? = null
@@ -134,6 +157,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         loadLatestMediaThumbnail()
+    }
+
+    private fun loadFlashMode(key: String, defaultMode: Int): Int {
+        val saved = prefs?.getInt(key, defaultMode) ?: defaultMode
+        return when (saved) {
+            ImageCapture.FLASH_MODE_AUTO,
+            ImageCapture.FLASH_MODE_ON,
+            ImageCapture.FLASH_MODE_OFF -> saved
+            else -> defaultMode
+        }
     }
 
     fun setImageCapture(capture: ImageCapture?) {
@@ -221,8 +254,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             } else {
                 CameraSelector.LENS_FACING_BACK
             }
+            val newFlashMode = if (newLens == CameraSelector.LENS_FACING_FRONT) {
+                current.frontPhotoFlashMode
+            } else {
+                current.backPhotoFlashMode
+            }
             current.copy(
                 lensFacing = newLens,
+                photoFlashMode = newFlashMode,
                 zoomLevel = 1f,
                 exposureCompensationIndex = 0
             )
@@ -297,7 +336,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 ImageCapture.FLASH_MODE_AUTO -> ImageCapture.FLASH_MODE_ON
                 else -> ImageCapture.FLASH_MODE_OFF
             }
-            current.copy(photoFlashMode = nextMode)
+            if (current.lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                prefs?.edit()?.putInt(KEY_FRONT_FLASH_MODE, nextMode)?.apply()
+                current.copy(
+                    photoFlashMode = nextMode,
+                    frontPhotoFlashMode = nextMode
+                )
+            } else {
+                prefs?.edit()?.putInt(KEY_BACK_FLASH_MODE, nextMode)?.apply()
+                current.copy(
+                    photoFlashMode = nextMode,
+                    backPhotoFlashMode = nextMode
+                )
+            }
         }
     }
 
@@ -591,5 +642,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val TAG = "CameraViewModel"
         private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
+        internal const val PREFS_NAME = "procamerax_preferences"
+        internal const val KEY_BACK_FLASH_MODE = "pref_back_photo_flash_mode"
+        internal const val KEY_FRONT_FLASH_MODE = "pref_front_photo_flash_mode"
     }
 }
