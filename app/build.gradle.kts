@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.procamerax"
+    namespace = "org.vaucam"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.procamerax"
+        applicationId = "org.vaucam"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

@@ -1,4 +1,4 @@
-package com.example.procamerax
+package org.vaucam
 
 import android.Manifest
 import android.content.Intent
@@ -44,8 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.procamerax.ui.screens.CameraScreen
-import com.example.procamerax.viewmodel.CameraViewModel
+import org.vaucam.ui.screens.CameraScreen
+import org.vaucam.viewmodel.CameraViewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
         if (cameraGranted) {
             viewModel.loadLatestMediaThumbnail()
         } else {
-            Toast.makeText(this, "Camera permission is required to use ProCameraX", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Camera permission is required to use VauCam", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -196,7 +196,7 @@ fun PermissionDeniedScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "ProCameraX needs Camera permission to capture photos and videos, and Microphone permission to record audio with your videos.",
+            text = "VauCam needs Camera permission to capture photos and videos, and Microphone permission to record audio with your videos.",
             color = Color.White.copy(alpha = 0.75f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center

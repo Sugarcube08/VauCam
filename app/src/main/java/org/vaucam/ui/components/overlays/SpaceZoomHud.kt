@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.overlays
+package org.vaucam.ui.components.overlays
 
 import android.content.Context
 import android.hardware.Sensor

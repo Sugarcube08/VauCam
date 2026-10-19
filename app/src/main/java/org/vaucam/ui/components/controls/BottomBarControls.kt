@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.controls
+package org.vaucam.ui.components.controls
 
 import coil.ImageLoader
 import coil.compose.AsyncImage
@@ -45,8 +45,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.procamerax.viewmodel.CameraMode
-import com.example.procamerax.viewmodel.CameraUiState
+import org.vaucam.viewmodel.CameraMode
+import org.vaucam.viewmodel.CameraUiState
 import kotlin.math.abs
 
 @Composable

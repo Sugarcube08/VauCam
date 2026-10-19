@@ -1,4 +1,4 @@
-package com.example.procamerax.viewmodel
+package org.vaucam.viewmodel
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -508,7 +508,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ProCameraX")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/VauCam")
             }
 
             val metadata = ImageCapture.Metadata().apply {
@@ -577,7 +577,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/ProCameraX")
+            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/VauCam")
         }
 
         val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(
@@ -662,7 +662,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     companion object {
         private const val TAG = "CameraViewModel"
         private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
-        internal const val PREFS_NAME = "procamerax_preferences"
+        internal const val PREFS_NAME = "vaucam_preferences"
         internal const val KEY_BACK_FLASH_MODE = "pref_back_photo_flash_mode"
         internal const val KEY_FRONT_FLASH_MODE = "pref_front_photo_flash_mode"
         internal const val FRONT_AUTO_FLASH_LUX_THRESHOLD = 20.0f

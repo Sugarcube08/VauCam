@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.controls
+package org.vaucam.ui.components.controls
 
 import androidx.camera.core.ImageCapture
 import androidx.camera.video.Quality
@@ -41,10 +41,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.procamerax.viewmodel.CameraMode
-import com.example.procamerax.viewmodel.CameraUiState
-import com.example.procamerax.viewmodel.FpsMode
-import com.example.procamerax.viewmodel.TimerMode
+import org.vaucam.viewmodel.CameraMode
+import org.vaucam.viewmodel.CameraUiState
+import org.vaucam.viewmodel.FpsMode
+import org.vaucam.viewmodel.TimerMode
 
 @Composable
 fun TopBarControls(

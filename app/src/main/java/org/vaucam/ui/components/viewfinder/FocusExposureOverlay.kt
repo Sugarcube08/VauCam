@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.viewfinder
+package org.vaucam.ui.components.viewfinder
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween

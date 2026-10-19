@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.viewfinder
+package org.vaucam.ui.components.viewfinder
 
 import android.content.Context
 import android.hardware.Sensor

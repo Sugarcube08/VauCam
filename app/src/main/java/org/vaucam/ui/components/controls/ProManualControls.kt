@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.controls
+package org.vaucam.ui.components.controls
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,10 +29,10 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.procamerax.viewmodel.CameraUiState
-import com.example.procamerax.viewmodel.PRO_ISO_OPTIONS
-import com.example.procamerax.viewmodel.PRO_SHUTTER_OPTIONS
-import com.example.procamerax.viewmodel.WhiteBalanceMode
+import org.vaucam.viewmodel.CameraUiState
+import org.vaucam.viewmodel.PRO_ISO_OPTIONS
+import org.vaucam.viewmodel.PRO_SHUTTER_OPTIONS
+import org.vaucam.viewmodel.WhiteBalanceMode
 import java.util.Locale
 
 private enum class ProTab {

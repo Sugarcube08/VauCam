@@ -1,4 +1,4 @@
-package com.example.procamerax.ui.components.overlays
+package org.vaucam.ui.components.overlays
 
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy

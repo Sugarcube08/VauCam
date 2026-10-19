@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ProCameraX"
+rootProject.name = "VauCam"
 include(":app")
