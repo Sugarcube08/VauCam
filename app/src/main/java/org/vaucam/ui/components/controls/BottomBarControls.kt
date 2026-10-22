@@ -1,5 +1,6 @@
 package org.vaucam.ui.components.controls
 
+import org.vaucam.ui.theme.VauCamBrand
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import androidx.compose.animation.core.animateFloatAsState
@@ -116,7 +117,7 @@ fun BottomBarControls(
                     Icon(
                         imageVector = if (uiState.isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
                         contentDescription = if (uiState.isRecordingPaused) "Resume Video" else "Pause Video",
-                        tint = if (uiState.isRecordingPaused) Color.Yellow else Color.White,
+                        tint = if (uiState.isRecordingPaused) VauCamBrand.Accent else Color.White,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -199,7 +200,7 @@ fun BottomBarControls(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = if (isSelected) Color.Yellow.copy(alpha = 0.2f) else Color.Transparent,
+                            color = if (isSelected) VauCamBrand.Accent.copy(alpha = 0.2f) else Color.Transparent,
                             shape = CircleShape
                         )
                         .clickable(enabled = !uiState.isRecording) {
@@ -212,7 +213,7 @@ fun BottomBarControls(
                     Text(
                         text = mode.label,
                         color = if (isSelected) {
-                            Color.Yellow
+                            VauCamBrand.Accent
                         } else if (uiState.isRecording) {
                             Color.White.copy(alpha = 0.35f)
                         } else {
@@ -241,7 +242,7 @@ fun ShutterButton(
         label = "shutterInnerRadius"
     )
 
-    val ringColor = if (mode == CameraMode.PRO) Color.Yellow else Color.White
+    val ringColor = if (mode == CameraMode.PRO) VauCamBrand.Accent else Color.White
 
     Box(
         modifier = modifier
@@ -256,7 +257,7 @@ fun ShutterButton(
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Cancel Timer",
-                tint = Color.Yellow,
+                tint = VauCamBrand.Accent,
                 modifier = Modifier.size(36.dp)
             )
         } else {
