@@ -797,17 +797,18 @@ class CameraViewModel(
                         put(MediaStore.MediaColumns.IS_PENDING, 1)
                     }
                 }
-                editedUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                val outputUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                     ?: throw IllegalStateException("Could not create edited photo in MediaStore")
-                val wrote = resolver.openOutputStream(editedUri, "w")?.use { stream ->
+                editedUri = outputUri
+                val wrote = resolver.openOutputStream(outputUri, "w")?.use { stream ->
                     bitmapForExport.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, stream)
                 } ?: false
                 check(wrote) { "Could not encode LUT-graded photo" }
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     val publish = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-                    resolver.update(editedUri, publish, null, null)
+                    resolver.update(outputUri, publish, null, null)
                 }
-                val resultUri = editedUri ?: throw IllegalStateException("Edited photo URI was not created")
+                val resultUri = outputUri
                 _uiState.update { it.copy(lastCapturedMediaUri = resultUri.toString(), lutError = null) }
             } catch (error: Exception) {
                 editedUri?.let { runCatching { resolver.delete(it, null, null) } }
