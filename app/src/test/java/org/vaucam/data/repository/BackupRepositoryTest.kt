@@ -1,5 +1,6 @@
 package org.vaucam.data.repository
 
+import android.app.Application
 import android.content.Context
 import android.net.Uri
 import androidx.room.Room
@@ -12,6 +13,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.junit.rules.TemporaryFolder
 import org.vaucam.data.database.BackupState
 import org.vaucam.data.database.CaptureDao
@@ -23,6 +27,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 
+@RunWith(RobolectricTestRunner::class)
 class BackupRepositoryTest {
 
     @get:Rule
@@ -45,7 +50,8 @@ class BackupRepositoryTest {
 
         val localFilesDir = filesDir
         val localCacheDir = cacheDir
-        val stubContext = object : android.content.ContextWrapper(null) {
+        val application = RuntimeEnvironment.getApplication<Application>()
+        val stubContext = object : android.content.ContextWrapper(application) {
             override fun getApplicationContext(): Context = this
             override fun getFilesDir(): File = localFilesDir
             override fun getCacheDir(): File = localCacheDir
