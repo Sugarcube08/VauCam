@@ -35,7 +35,7 @@ object CubeLutImporter {
             }
             output.toByteArray()
         }
-        val text = raw.toString(Charsets.UTF_8.name())
+        val text = raw.toString(Charsets.UTF_8)
         require(!text.contains('\u0000')) { "LUT file is not valid UTF-8 text" }
         return CubeLut.parse(text.reader())
     }
