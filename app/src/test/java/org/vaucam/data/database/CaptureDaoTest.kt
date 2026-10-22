@@ -1,6 +1,6 @@
 package org.vaucam.data.database
 
-import android.content.Context
+import android.app.Application
 import androidx.room.Room
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -9,8 +9,12 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import java.io.File
 
+@RunWith(RobolectricTestRunner::class)
 class CaptureDaoTest {
 
     private lateinit var database: VauCamDatabase
@@ -18,11 +22,8 @@ class CaptureDaoTest {
 
     @Before
     fun setUp() {
-        val stubContext = object : android.content.ContextWrapper(null) {
-            override fun getApplicationContext(): Context = this
-        }
-
-        database = Room.inMemoryDatabaseBuilder(stubContext, VauCamDatabase::class.java)
+        val application = RuntimeEnvironment.getApplication<Application>()
+        database = Room.inMemoryDatabaseBuilder(application, VauCamDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         dao = database.captureDao()
@@ -133,8 +134,8 @@ class CaptureDaoTest {
     @Test
     fun `getPendingBackups returns only CAPTURED and BACKUP_PENDING records`() = runBlocking {
         dao.insert(CaptureRecordEntity("r1", MediaType.PHOTO, BackupState.CAPTURE_REQUESTED, 100L))
-        dao.insert(CaptureRecordEntity("r2", MediaType.PHOTO, BackupState.CAPTURED, 200L))
-        dao.insert(CaptureRecordEntity("r3", MediaType.PHOTO, BackupState.BACKUP_PENDING, 300L))
+        dao.insert(CaptureRecordEntity("r2", MediaType.PHOTO, BackupState.CAPTURED, 200L, originalUri = "content://media/images/2"))
+        dao.insert(CaptureRecordEntity("r3", MediaType.PHOTO, BackupState.BACKUP_PENDING, 300L, originalUri = "content://media/images/3"))
         dao.insert(CaptureRecordEntity("r4", MediaType.PHOTO, BackupState.PROTECTED, 400L))
 
         val pending = dao.getPendingBackups()
