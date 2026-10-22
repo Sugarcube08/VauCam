@@ -22,7 +22,7 @@ class CaptureDaoTest {
 
     @Before
     fun setUp() {
-        val application = RuntimeEnvironment.getApplication<Application>()
+        val application = RuntimeEnvironment.getApplication()
         database = Room.inMemoryDatabaseBuilder(application, VauCamDatabase::class.java)
             .allowMainThreadQueries()
             .build()
@@ -154,7 +154,7 @@ class CaptureDaoTest {
         val interrupted = dao.getInterruptedOrReconciliationRecords()
         assertEquals(3, interrupted.size)
     }
-}
+
     @Test
     fun `findOrphanCaptureIntent matches stale intent by media type and narrow time window`() = runBlocking {
         val captureTime = 1_765_000_000_000L
