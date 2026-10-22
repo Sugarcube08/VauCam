@@ -29,19 +29,46 @@ class ReconciliationWorker(
         val repository = BackupRepository(applicationContext, dao, storageManager)
         val workManager = WorkManager.getInstance(applicationContext)
 
-        // 1. Recover interrupted backup jobs (crashed during copy or verify)
-        val interrupted = repository.getInterruptedOrReconciliationRecords()
-        for (record in interrupted) {
-            dao.updateState(record.id, BackupState.BACKUP_PENDING, "Recovered after process restart")
-            workManager.enqueue(MediaBackupWorker.buildWorkRequest(record.id))
+        // Recover interrupted backup states idempotently. Never create parallel work chains
+        // for a capture: the capture callback and reconciliation worker can race.
+        repository.getInterruptedOrReconciliationRecords().forEach { record ->
+            if (record.originalUri != null) {
+                dao.updateState(record.id, BackupState.BACKUP_PENDING, "Recovered after process restart")
+                workManager.enqueueUniqueWork(
+                    "backup_${record.id}",
+                    androidx.work.ExistingWorkPolicy.KEEP,
+                    MediaBackupWorker.buildWorkRequest(record.id)
+                )
+            } else {
+                // An intent without an output URI cannot be copied yet. Let MediaStore scanning
+                // correlate any orphan output before treating the record as unrecoverable.
+                dao.updateState(
+                    record.id,
+                    BackupState.RECOVERY_REQUIRED,
+                    "No original URI recorded; waiting for MediaStore reconciliation"
+                )
+            }
         }
 
-        // 2. Reconcile stale CAPTURE_REQUESTED intents older than 2 minutes
+        // Requeue rows that have a confirmed source and are awaiting/retrying a backup.
+        repository.getPendingBackups().forEach { record ->
+            workManager.enqueueUniqueWork(
+                "backup_${record.id}",
+                androidx.work.ExistingWorkPolicy.KEEP,
+                MediaBackupWorker.buildWorkRequest(record.id)
+            )
+        }
+
+        // A stale request may have produced a file before the process died. Mark it for
+        // reconciliation rather than assuming capture failed.
         val now = System.currentTimeMillis()
-        val requestedRecords = dao.getByState(BackupState.CAPTURE_REQUESTED)
-        for (record in requestedRecords) {
+        dao.getByState(BackupState.CAPTURE_REQUESTED).forEach { record ->
             if (now - record.createdAt > 120_000L) {
-                dao.updateState(record.id, BackupState.RECOVERY_REQUIRED, "Capture intent timed out")
+                dao.updateState(
+                    record.id,
+                    BackupState.RECOVERY_REQUIRED,
+                    "Capture intent timed out; checking MediaStore for an orphan output"
+                )
             }
         }
 
