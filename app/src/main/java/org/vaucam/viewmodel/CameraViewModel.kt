@@ -784,8 +784,13 @@ class CameraViewModel(
             var sourceBitmap: android.graphics.Bitmap? = null
             var editedBitmap: android.graphics.Bitmap? = null
             try {
-                val decodedBitmap = resolver.openInputStream(sourceUri)?.use { BitmapFactory.decodeStream(it) }
-                    ?: throw IllegalStateException("Could not decode captured photo")
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                    inMutable = true
+                }
+                val decodedBitmap = resolver.openInputStream(sourceUri)?.use {
+                    BitmapFactory.decodeStream(it, null, decodeOptions)
+                } ?: throw IllegalStateException("Could not decode captured photo")
                 sourceBitmap = decodedBitmap
                 val bitmapForExport = CubeLutBitmapProcessor.apply(decodedBitmap, lut)
                 editedBitmap = bitmapForExport
@@ -810,6 +815,10 @@ class CameraViewModel(
                 }
                 val resultUri = outputUri
                 _uiState.update { it.copy(lastCapturedMediaUri = resultUri.toString(), lutError = null) }
+            } catch (error: OutOfMemoryError) {
+                editedUri?.let { runCatching { resolver.delete(it, null, null) } }
+                Log.e(TAG, "Insufficient memory to grade this photo; original capture remains available", error)
+                _uiState.update { it.copy(lutError = "Not enough memory to apply this LUT; original photo was kept.") }
             } catch (error: Exception) {
                 editedUri?.let { runCatching { resolver.delete(it, null, null) } }
                 Log.e(TAG, "LUT still export failed; original capture remains available", error)
