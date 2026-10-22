@@ -25,9 +25,13 @@ class ProtectedStorageManagerTest {
     fun setUp() {
         filesDir = tempFolder.newFolder("files")
         cacheDir = tempFolder.newFolder("cache")
+        // Capture outer paths into locals before entering the ContextWrapper. Referencing
+        // the same-named getters here would recursively call the overrides and overflow.
+        val localFilesDir = filesDir
+        val localCacheDir = cacheDir
         val stubContext = object : android.content.ContextWrapper(null) {
-            override fun getFilesDir(): File = filesDir
-            override fun getCacheDir(): File = cacheDir
+            override fun getFilesDir(): File = localFilesDir
+            override fun getCacheDir(): File = localCacheDir
         }
         storageManager = ProtectedStorageManager(stubContext)
     }
