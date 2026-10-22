@@ -57,6 +57,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
@@ -987,7 +989,11 @@ fun CameraScreen(
         }
 
         // Pro Manual Dials Panel (Shown in PRO mode)
-        if (uiState.cameraMode == CameraMode.PRO) {
+        AnimatedVisibility(
+            visible = uiState.cameraMode == CameraMode.PRO,
+            enter = fadeIn(tween(180)) + expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)),
+            exit = fadeOut(tween(120)) + shrinkVertically(animationSpec = tween(180, easing = FastOutSlowInEasing))
+        ) {
             ProManualControls(
                 uiState = uiState,
                 onSetWhiteBalance = { viewModel.setProWhiteBalance(it) },
