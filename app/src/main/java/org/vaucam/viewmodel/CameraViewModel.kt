@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraMetadata
 import android.net.Uri
 import android.provider.MediaStore
+import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.CameraSelector
@@ -35,6 +36,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.vaucam.camera.CaptureCoordinator
 import org.vaucam.data.database.MediaType
+import org.vaucam.lut.CubeLut
+import org.vaucam.lut.CubeLutBitmapProcessor
+import org.vaucam.lut.CubeLutImporter
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -127,10 +131,12 @@ data class CameraUiState(
     val isScreenFlashActive: Boolean = false,
     val ambientLux: Float? = null,
     val histogramBins: List<Float> = List(64) { 0f },
-    val protectedMediaCount: Int = 0
+    val protectedMediaCount: Int = 0,
+    val activeLutTitle: String? = null,
+    val lutError: String? = null
 )
 
-class CameraViewModel(
+class CameraViewModel @JvmOverloads constructor(
     application: Application,
     coordinator: CaptureCoordinator? = null
 ) : AndroidViewModel(application) {
@@ -166,10 +172,12 @@ class CameraViewModel(
     private var recording: Recording? = null
     private var countdownJob: Job? = null
     private var activeVideoCaptureId: String? = null
+    @Volatile private var activeLut: CubeLut? = null
 
     init {
         loadLatestMediaThumbnail()
         observeProtectedMediaCount()
+        restoreSelectedLut()
     }
 
     private fun observeProtectedMediaCount() {
@@ -581,11 +589,12 @@ class CameraViewModel(
                         }
                         _uiState.update {
                             it.copy(
-                                lastCapturedMediaUri = output.savedUri.toString(),
+                                lastCapturedMediaUri = output.savedUri?.toString(),
                                 photoCaptureProgress = null,
                                 isScreenFlashActive = false
                             )
                         }
+                        output.savedUri?.let { uri -> applyActiveLutToStill(uri, name) }
                     }
 
                     override fun onCaptureProcessProgressed(progress: Int) {
@@ -722,6 +731,105 @@ class CameraViewModel(
         }
     }
 
+
+    /** Imports and activates a .cube LUT. The original camera capture is never overwritten. */
+    fun importLut(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                CubeLutImporter.importLut(getApplication<Application>().contentResolver, uri)
+            }.onSuccess { lut ->
+                activeLut = lut
+                prefs?.edit()?.putString(KEY_SELECTED_LUT_URI, uri.toString())?.apply()
+                _uiState.update {
+                    it.copy(activeLutTitle = lut.title?.takeIf(String::isNotBlank) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Imported LUT", lutError = null)
+                }
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to import LUT", error)
+                _uiState.update { it.copy(lutError = error.message ?: "Could not import LUT") }
+            }
+        }
+    }
+
+    fun clearLut() {
+        activeLut = null
+        prefs?.edit()?.remove(KEY_SELECTED_LUT_URI)?.apply()
+        _uiState.update { it.copy(activeLutTitle = null, lutError = null) }
+    }
+
+    private fun restoreSelectedLut() {
+        val savedUri = prefs?.getString(KEY_SELECTED_LUT_URI, null) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                CubeLutImporter.importLut(
+                    getApplication<Application>().contentResolver,
+                    Uri.parse(savedUri)
+                )
+            }.onSuccess { lut ->
+                activeLut = lut
+                _uiState.update {
+                    it.copy(activeLutTitle = lut.title?.takeIf(String::isNotBlank) ?: Uri.parse(savedUri).lastPathSegment?.substringAfterLast('/') ?: "Imported LUT")
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Saved LUT could not be restored; select it again", error)
+                _uiState.update { it.copy(lutError = "Saved LUT is unavailable. Import it again.") }
+            }
+        }
+    }
+
+    private fun applyActiveLutToStill(sourceUri: Uri, originalName: String) {
+        val lut = activeLut ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val resolver = getApplication<Application>().contentResolver
+            var editedUri: Uri? = null
+            var sourceBitmap: android.graphics.Bitmap? = null
+            var editedBitmap: android.graphics.Bitmap? = null
+            try {
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                    inMutable = true
+                }
+                val decodedBitmap = resolver.openInputStream(sourceUri)?.use {
+                    BitmapFactory.decodeStream(it, null, decodeOptions)
+                } ?: throw IllegalStateException("Could not decode captured photo")
+                sourceBitmap = decodedBitmap
+                val bitmapForExport = CubeLutBitmapProcessor.apply(decodedBitmap, lut)
+                editedBitmap = bitmapForExport
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "${originalName.substringBeforeLast('.', originalName)}_LUT.jpg")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/VauCam/Edited")
+                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    }
+                }
+                val outputUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: throw IllegalStateException("Could not create edited photo in MediaStore")
+                editedUri = outputUri
+                val wrote = resolver.openOutputStream(outputUri, "w")?.use { stream ->
+                    bitmapForExport.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, stream)
+                } ?: false
+                check(wrote) { "Could not encode LUT-graded photo" }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val publish = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                    resolver.update(outputUri, publish, null, null)
+                }
+                val resultUri = outputUri
+                _uiState.update { it.copy(lastCapturedMediaUri = resultUri.toString(), lutError = null) }
+            } catch (error: OutOfMemoryError) {
+                editedUri?.let { runCatching { resolver.delete(it, null, null) } }
+                Log.e(TAG, "Insufficient memory to grade this photo; original capture remains available", error)
+                _uiState.update { it.copy(lutError = "Not enough memory to apply this LUT; original photo was kept.") }
+            } catch (error: Exception) {
+                editedUri?.let { runCatching { resolver.delete(it, null, null) } }
+                Log.e(TAG, "LUT still export failed; original capture remains available", error)
+                _uiState.update { it.copy(lutError = "LUT export failed; original photo was kept.") }
+            } finally {
+                if (editedBitmap !== sourceBitmap) editedBitmap?.recycle()
+                sourceBitmap?.recycle()
+            }
+        }
+    }
+
     fun togglePauseResumeVideo() {
         val curRecording = recording ?: return
         if (!uiState.value.isRecording) return
@@ -738,6 +846,7 @@ class CameraViewModel(
         internal const val PREFS_NAME = "vaucam_preferences"
         internal const val KEY_BACK_FLASH_MODE = "pref_back_photo_flash_mode"
         internal const val KEY_FRONT_FLASH_MODE = "pref_front_photo_flash_mode"
+        private const val KEY_SELECTED_LUT_URI = "pref_selected_cube_lut_uri"
         internal const val FRONT_AUTO_FLASH_LUX_THRESHOLD = 20.0f
     }
 }

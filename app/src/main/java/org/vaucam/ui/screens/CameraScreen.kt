@@ -29,6 +29,9 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.DynamicRange
+import androidx.camera.core.ExperimentalCameraInfo
+import androidx.camera.core.ExperimentalImageCaptureOutputFormat
+import androidx.camera.core.ExperimentalZeroShutterLag
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -45,18 +48,33 @@ import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,12 +92,15 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Observer
@@ -87,6 +108,7 @@ import coil.ImageLoader
 import coil.decode.VideoFrameDecoder
 import org.vaucam.ui.components.controls.BottomBarControls
 import org.vaucam.ui.components.controls.ProManualControls
+import org.vaucam.ui.components.controls.RealmeYellow
 import org.vaucam.ui.components.controls.TopBarControls
 import org.vaucam.ui.components.overlays.CountdownTimerOverlay
 import org.vaucam.ui.components.overlays.HistogramOverlay
@@ -109,11 +131,17 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-@OptIn(ExperimentalCamera2Interop::class)
+@OptIn(
+    ExperimentalCamera2Interop::class,
+    ExperimentalCameraInfo::class,
+    ExperimentalZeroShutterLag::class,
+    ExperimentalImageCaptureOutputFormat::class
+)
 @Composable
 fun CameraScreen(
     viewModel: CameraViewModel,
@@ -123,6 +151,14 @@ fun CameraScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val haptic = LocalHapticFeedback.current
+    val lutPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            viewModel.importLut(uri)
+        }
+    }
 
     val imageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -661,26 +697,48 @@ fun CameraScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Viewfinder Area
-        Box(
+        // Viewfinder Area with Realme-style Animated Frame Expansion & Letterbox Curtains
+        BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center
         ) {
+            val containerWidth = maxWidth
+            val containerHeight = maxHeight
+
+            val targetRatio = when (uiState.aspectRatioMode) {
+                AspectRatioMode.RATIO_1_1 -> 1.0f
+                AspectRatioMode.RATIO_4_3 -> 3f / 4f
+                AspectRatioMode.RATIO_16_9 -> 9f / 16f
+                AspectRatioMode.RATIO_FULL -> if (containerHeight.value > 0f) (containerWidth.value / containerHeight.value) else (9f / 16f)
+            }
+
+            val animatedRatio by animateFloatAsState(
+                targetValue = targetRatio,
+                animationSpec = tween(durationMillis = 360, easing = FastOutSlowInEasing),
+                label = "viewfinderAspectRatio"
+            )
+
+            val frameHeight = (containerWidth / animatedRatio).coerceAtMost(containerHeight)
+            val curtainHeight = ((containerHeight - frameHeight) / 2f).coerceAtLeast(0.dp)
+
+            var showRatioBadge by remember { mutableStateOf(false) }
+            LaunchedEffect(uiState.aspectRatioMode) {
+                showRatioBadge = true
+                delay(1200)
+                showRatioBadge = false
+            }
+
             var focusPoint by remember { mutableStateOf<Offset?>(null) }
 
-            val aspectRatioModifier = uiState.aspectRatioMode.ratioValue?.let { ratio ->
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(ratio)
+            // Aspect-Ratio-Framed Camera Preview Box (with animated size expansion)
+            Box(
+                modifier = Modifier
+                    .width(containerWidth)
+                    .height(frameHeight)
                     .clipToBounds()
-            } ?: Modifier
-                .fillMaxSize()
-                .clipToBounds()
-
-            // Aspect-Ratio-Framed Camera Preview Box
-            Box(modifier = aspectRatioModifier) {
+            ) {
                 AndroidView(
                     factory = { previewView },
                     modifier = Modifier
@@ -749,6 +807,52 @@ fun CameraScreen(
                     shutterFlashTrigger = uiState.shutterFlashTrigger,
                     isScreenFlashActive = uiState.isScreenFlashActive
                 )
+
+                // Realme Viewfinder Composition Corner Brackets
+                RealmeFrameCorners(
+                    modifier = Modifier.fillMaxSize(),
+                    isAnimating = abs(animatedRatio - targetRatio) > 0.005f
+                )
+            }
+
+            // Top and Bottom Shutter Curtains (Matte Letterboxing)
+            if (curtainHeight > 0.dp) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(curtainHeight)
+                        .align(Alignment.TopCenter)
+                        .background(Color.Black)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(curtainHeight)
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black)
+                )
+            }
+
+            // Transient Realme Aspect Ratio Notification Badge
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showRatioBadge,
+                enter = fadeIn(tween(160)) + scaleIn(tween(160)),
+                exit = fadeOut(tween(300)) + scaleOut(tween(300)),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+                        .border(1.5.dp, RealmeYellow, RoundedCornerShape(12.dp))
+                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = uiState.aspectRatioMode.label,
+                        color = RealmeYellow,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
             }
 
             // Top Utility & Mode Bar
@@ -777,6 +881,41 @@ fun CameraScreen(
                 onToggleVideoHdr = { viewModel.toggleVideoHdr() },
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+
+            // LUT import controls. This grades exported still copies; preview/video LUT processing is not yet wired.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 12.dp, top = 76.dp)
+            ) {
+                Text(
+                    text = if (uiState.activeLutTitle == null) "IMPORT LUT" else "LUT: ${uiState.activeLutTitle}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.72f), CircleShape)
+                        .clickable { lutPicker.launch(arrayOf("*/*")) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+                if (uiState.activeLutTitle != null) {
+                    Text(
+                        text = "Disable",
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .padding(top = 4.dp, start = 8.dp)
+                            .clickable { viewModel.clearLut() }
+                    )
+                }
+                uiState.lutError?.let { error ->
+                    Text(
+                        text = error,
+                        color = Color(0xFFFF8A80),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
 
             // Video Recording Timer Pill (MM:SS + Pause status)
             RecordingTimerPill(
@@ -1027,4 +1166,41 @@ private fun applyProCaptureRequestOptions(
         Log.e("CameraScreen", "Failed to apply Pro camera controls", e)
     }
 }
+
+@Composable
+private fun RealmeFrameCorners(
+    modifier: Modifier = Modifier,
+    isAnimating: Boolean = false
+) {
+    val cornerAlpha by animateFloatAsState(
+        targetValue = if (isAnimating) 0.85f else 0.25f,
+        animationSpec = tween(durationMillis = 300),
+        label = "frameCornerAlpha"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize().padding(6.dp)) {
+        val w = size.width
+        val h = size.height
+        val bracketLen = 16.dp.toPx()
+        val strokeW = 2.dp.toPx()
+        val color = RealmeYellow.copy(alpha = cornerAlpha)
+
+        // Top-Left
+        drawLine(color, Offset(0f, 0f), Offset(bracketLen, 0f), strokeW, StrokeCap.Round)
+        drawLine(color, Offset(0f, 0f), Offset(0f, bracketLen), strokeW, StrokeCap.Round)
+
+        // Top-Right
+        drawLine(color, Offset(w, 0f), Offset(w - bracketLen, 0f), strokeW, StrokeCap.Round)
+        drawLine(color, Offset(w, 0f), Offset(w, bracketLen), strokeW, StrokeCap.Round)
+
+        // Bottom-Left
+        drawLine(color, Offset(0f, h), Offset(bracketLen, h), strokeW, StrokeCap.Round)
+        drawLine(color, Offset(0f, h), Offset(0f, h - bracketLen), strokeW, StrokeCap.Round)
+
+        // Bottom-Right
+        drawLine(color, Offset(w, h), Offset(w - bracketLen, h), strokeW, StrokeCap.Round)
+        drawLine(color, Offset(w, h), Offset(w, h - bracketLen), strokeW, StrokeCap.Round)
+    }
+}
+
 
