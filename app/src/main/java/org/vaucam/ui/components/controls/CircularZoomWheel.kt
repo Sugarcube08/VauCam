@@ -70,9 +70,9 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-// Realme signature yellow accent
-val VauCamBrand.Accent = Color(0xFFFFCC00)
-val VauCamBrand.Glass = Color(0xCC111111)
+// Legacy aliases retained for source compatibility with existing camera controls.
+val RealmeYellow = VauCamBrand.Accent
+val RealmeDarkBg = VauCamBrand.Glass
 
 /**
  * Realme Camera-style Circular Zoom Wheel with:
