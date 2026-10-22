@@ -1,5 +1,6 @@
 package org.vaucam.ui.components.controls
 
+import org.vaucam.ui.theme.VauCamBrand
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalZeroShutterLag
 import androidx.camera.core.ImageCapture
@@ -81,7 +82,7 @@ fun TopBarControls(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                .background(VauCamBrand.Glass, CircleShape)
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -104,9 +105,9 @@ fun TopBarControls(
                     }
                 }
                 val tint = if (uiState.cameraMode == CameraMode.VIDEO) {
-                    if (uiState.isTorchEnabled) Color.Yellow else Color.White
+                    if (uiState.isTorchEnabled) VauCamBrand.Accent else Color.White
                 } else {
-                    if (uiState.photoFlashMode != ImageCapture.FLASH_MODE_OFF) Color.Yellow else Color.White
+                    if (uiState.photoFlashMode != ImageCapture.FLASH_MODE_OFF) VauCamBrand.Accent else Color.White
                 }
                 Icon(
                     imageVector = icon,
@@ -149,7 +150,7 @@ fun TopBarControls(
                     Icon(
                         imageVector = timerIcon,
                         contentDescription = "Shutter Timer",
-                        tint = if (uiState.timerMode != TimerMode.OFF) Color.Yellow else Color.White,
+                        tint = if (uiState.timerMode != TimerMode.OFF) VauCamBrand.Accent else Color.White,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -159,7 +160,7 @@ fun TopBarControls(
             Box(
                 modifier = Modifier
                     .rotate(uiRotationDegrees)
-                    .background(Color.DarkGray.copy(alpha = 0.6f), CircleShape)
+                    .background(VauCamBrand.SurfaceElevated.copy(alpha = 0.9f), CircleShape)
                     .clickable(enabled = !uiState.isRecording) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onCycleAspectRatio()
@@ -169,7 +170,7 @@ fun TopBarControls(
             ) {
                 Text(
                     text = uiState.aspectRatioMode.label,
-                    color = Color.Yellow,
+                    color = VauCamBrand.Accent,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
                 )
@@ -186,7 +187,7 @@ fun TopBarControls(
                 Icon(
                     imageVector = if (uiState.isGridEnabled) Icons.Default.GridOn else Icons.Default.GridOff,
                     contentDescription = "Toggle Grid",
-                    tint = if (uiState.isGridEnabled) Color.Yellow else Color.White,
+                    tint = if (uiState.isGridEnabled) VauCamBrand.Accent else Color.White,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -202,7 +203,7 @@ fun TopBarControls(
                 Icon(
                     imageVector = Icons.Default.Straighten,
                     contentDescription = "Toggle Horizon Leveler",
-                    tint = if (uiState.isLevelerEnabled) Color.Yellow else Color.White,
+                    tint = if (uiState.isLevelerEnabled) VauCamBrand.Accent else Color.White,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -219,7 +220,7 @@ fun TopBarControls(
                     Icon(
                         imageVector = Icons.Default.BarChart,
                         contentDescription = "Toggle Histogram",
-                        tint = if (uiState.isHistogramEnabled) Color.Yellow else Color.White,
+                        tint = if (uiState.isHistogramEnabled) VauCamBrand.Accent else Color.White,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -244,7 +245,7 @@ fun TopBarControls(
                 captureModes.forEach { (label, mode) ->
                     Text(
                         text = label,
-                        color = if (uiState.imageCaptureMode == mode) Color.Yellow else Color.White,
+                        color = if (uiState.imageCaptureMode == mode) VauCamBrand.Accent else Color.White,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -262,7 +263,7 @@ fun TopBarControls(
                 if (uiState.cameraMode == CameraMode.PHOTO) {
                     Surface(
                         color = if (uiState.isAutoNightModeEnabled) {
-                            Color.Yellow.copy(alpha = 0.22f)
+                            VauCamBrand.Accent.copy(alpha = 0.22f)
                         } else {
                             Color.DarkGray.copy(alpha = 0.55f)
                         },
@@ -280,12 +281,12 @@ fun TopBarControls(
                             Icon(
                                 imageVector = Icons.Default.NightsStay,
                                 contentDescription = "Auto Night Mode",
-                                tint = if (uiState.isAutoNightModeEnabled) Color.Yellow else Color.White,
+                                tint = if (uiState.isAutoNightModeEnabled) VauCamBrand.Accent else Color.White,
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
                                 text = if (uiState.isAutoNightModeEnabled) "AUTO NIGHT ON" else "AUTO NIGHT OFF",
-                                color = if (uiState.isAutoNightModeEnabled) Color.Yellow else Color.White,
+                                color = if (uiState.isAutoNightModeEnabled) VauCamBrand.Accent else Color.White,
                                 style = MaterialTheme.typography.labelSmall
                             )
                         }
@@ -299,7 +300,7 @@ fun TopBarControls(
                     ) {
                         Text(
                             text = "ULTRA HDR",
-                            color = Color.Yellow,
+                            color = VauCamBrand.Accent,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelSmall
                         )
@@ -324,7 +325,7 @@ fun TopBarControls(
                 videoQualities.forEach { (label, quality) ->
                     Text(
                         text = label,
-                        color = if (uiState.videoQuality == quality) Color.Yellow else Color.White,
+                        color = if (uiState.videoQuality == quality) VauCamBrand.Accent else Color.White,
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -353,7 +354,7 @@ fun TopBarControls(
                     Text(
                         text = label,
                         color = if (uiState.videoFps == fps) {
-                            Color.Yellow
+                            VauCamBrand.Accent
                         } else if (isDisabled) {
                             Color.White.copy(alpha = 0.3f)
                         } else {
@@ -375,7 +376,7 @@ fun TopBarControls(
             ) {
                 Surface(
                     color = if (uiState.isVideoStabilizationEnabled) {
-                        Color.Yellow.copy(alpha = 0.22f)
+                        VauCamBrand.Accent.copy(alpha = 0.22f)
                     } else {
                         Color.DarkGray.copy(alpha = 0.55f)
                     },
@@ -387,7 +388,7 @@ fun TopBarControls(
                 ) {
                     Text(
                         text = if (uiState.isVideoStabilizationEnabled) "STABILIZED" else "STABILIZATION OFF",
-                        color = if (uiState.isVideoStabilizationEnabled) Color.Yellow else Color.White,
+                        color = if (uiState.isVideoStabilizationEnabled) VauCamBrand.Accent else Color.White,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -395,7 +396,7 @@ fun TopBarControls(
 
                 Surface(
                     color = if (uiState.isVideoHdrEnabled) {
-                        Color.Yellow.copy(alpha = 0.22f)
+                        VauCamBrand.Accent.copy(alpha = 0.22f)
                     } else {
                         Color.DarkGray.copy(alpha = 0.55f)
                     },
@@ -407,7 +408,7 @@ fun TopBarControls(
                 ) {
                     Text(
                         text = if (uiState.isVideoHdrEnabled) "HDR 10-BIT" else "HDR OFF",
-                        color = if (uiState.isVideoHdrEnabled) Color.Yellow else Color.White,
+                        color = if (uiState.isVideoHdrEnabled) VauCamBrand.Accent else Color.White,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelSmall
                     )

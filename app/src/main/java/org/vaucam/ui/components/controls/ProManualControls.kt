@@ -1,5 +1,6 @@
 package org.vaucam.ui.components.controls
 
+import org.vaucam.ui.theme.VauCamBrand
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -97,7 +98,7 @@ fun ProManualControls(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(RealmeDarkBg, RoundedCornerShape(20.dp))
+            .background(VauCamBrand.Glass, RoundedCornerShape(20.dp))
             .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(20.dp))
             .padding(vertical = 10.dp, horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -231,7 +232,7 @@ fun ProManualControls(
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(
-                        if (hasCustomValues) RealmeYellow.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.08f)
+                        if (hasCustomValues) VauCamBrand.Accent.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.08f)
                     )
                     .clickable(enabled = hasCustomValues) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -243,7 +244,7 @@ fun ProManualControls(
                 Icon(
                     imageVector = Icons.Default.RestartAlt,
                     contentDescription = "Reset Pro Parameters",
-                    tint = if (hasCustomValues) RealmeYellow else Color.White.copy(alpha = 0.35f),
+                    tint = if (hasCustomValues) VauCamBrand.Accent else Color.White.copy(alpha = 0.35f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -281,7 +282,7 @@ private fun RealmeParameterItem(
             modifier = Modifier
                 .size(4.dp)
                 .background(
-                    if (isModified) RealmeYellow else Color.Transparent,
+                    if (isModified) VauCamBrand.Accent else Color.Transparent,
                     CircleShape
                 )
         )
@@ -290,14 +291,14 @@ private fun RealmeParameterItem(
 
         Text(
             text = label,
-            color = if (isModified || isSelected) RealmeYellow else Color.White.copy(alpha = 0.65f),
+            color = if (isModified || isSelected) VauCamBrand.Accent else Color.White.copy(alpha = 0.65f),
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold
         )
 
         Text(
             text = value,
-            color = if (isModified) RealmeYellow else Color.White,
+            color = if (isModified) VauCamBrand.Accent else Color.White,
             fontSize = 11.sp,
             fontWeight = if (isModified || isSelected) FontWeight.ExtraBold else FontWeight.Medium
         )
@@ -324,7 +325,7 @@ private fun RealmeIsoRuler(
         // Current Readout
         Text(
             text = if (currentIso == null) "ISO AUTO" else "ISO $currentIso",
-            color = RealmeYellow,
+            color = VauCamBrand.Accent,
             fontSize = 15.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -359,7 +360,7 @@ private fun RealmeIsoRuler(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(
-                                if (isSelected) RealmeYellow else Color.White.copy(alpha = 0.12f)
+                                if (isSelected) VauCamBrand.Accent else Color.White.copy(alpha = 0.12f)
                             )
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -403,7 +404,7 @@ private fun RealmeShutterRuler(
         // Current Readout
         Text(
             text = if (activeOption == null) "SHUTTER AUTO" else "S ${activeOption.label}s",
-            color = RealmeYellow,
+            color = VauCamBrand.Accent,
             fontSize = 15.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -436,7 +437,7 @@ private fun RealmeShutterRuler(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(
-                                if (isSelected) RealmeYellow else Color.White.copy(alpha = 0.12f)
+                                if (isSelected) VauCamBrand.Accent else Color.White.copy(alpha = 0.12f)
                             )
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -480,7 +481,7 @@ private fun RealmeEvRuler(
     ) {
         Text(
             text = if (currentIndex == 0) "EV 0.0" else String.format(Locale.US, "EV %+.1f", currentEv),
-            color = RealmeYellow,
+            color = VauCamBrand.Accent,
             fontSize = 15.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -535,7 +536,7 @@ private fun RealmeEvRuler(
                             val isZero = i == 0
                             val isMain = i % 3 == 0 || isZero
                             val tickH = if (isZero) 24.dp.toPx() else if (isMain) 16.dp.toPx() else 8.dp.toPx()
-                            val color = if (isZero) RealmeYellow else Color.White.copy(alpha = 0.5f)
+                            val color = if (isZero) VauCamBrand.Accent else Color.White.copy(alpha = 0.5f)
 
                             drawLine(
                                 color = color,
@@ -549,7 +550,7 @@ private fun RealmeEvRuler(
 
                     // Center fixed Realme Yellow indicator line
                     drawLine(
-                        color = RealmeYellow,
+                        color = VauCamBrand.Accent,
                         start = Offset(centerX, 2.dp.toPx()),
                         end = Offset(centerX, h - 2.dp.toPx()),
                         strokeWidth = 3.dp.toPx(),
@@ -579,7 +580,7 @@ private fun RealmeFocusRuler(
     ) {
         Text(
             text = if (currentFocus == null) "FOCUS AF" else String.format(Locale.US, "MF %.2f", currentFocus),
-            color = RealmeYellow,
+            color = VauCamBrand.Accent,
             fontSize = 15.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -646,7 +647,7 @@ private fun RealmeFocusRuler(
                     // Active track line
                     if (currentFocus != null) {
                         drawLine(
-                            color = RealmeYellow,
+                            color = VauCamBrand.Accent,
                             start = Offset(0f, h / 2f),
                             end = Offset(needleX, h / 2f),
                             strokeWidth = 3.dp.toPx(),
@@ -655,7 +656,7 @@ private fun RealmeFocusRuler(
 
                         // Thumb dot
                         drawCircle(
-                            color = RealmeYellow,
+                            color = VauCamBrand.Accent,
                             radius = 7.dp.toPx(),
                             center = Offset(needleX, h / 2f)
                         )
@@ -701,7 +702,7 @@ private fun RealmeWbRuler(
     ) {
         Text(
             text = if (currentWb == WhiteBalanceMode.AUTO) "WB AUTO" else "WB ${currentWb.label}",
-            color = RealmeYellow,
+            color = VauCamBrand.Accent,
             fontSize = 15.sp,
             fontWeight = FontWeight.Black,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -734,7 +735,7 @@ private fun RealmeWbRuler(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(
-                                if (isSelected) RealmeYellow else Color.White.copy(alpha = 0.12f)
+                                if (isSelected) VauCamBrand.Accent else Color.White.copy(alpha = 0.12f)
                             )
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -776,7 +777,7 @@ private fun RealmeAutoPill(
         modifier = Modifier
             .clip(CircleShape)
             .background(
-                if (isAuto) RealmeYellow else Color.White.copy(alpha = 0.15f)
+                if (isAuto) VauCamBrand.Accent else Color.White.copy(alpha = 0.15f)
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),

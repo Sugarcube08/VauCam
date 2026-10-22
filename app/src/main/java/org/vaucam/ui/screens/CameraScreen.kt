@@ -1,5 +1,6 @@
 package org.vaucam.ui.screens
 
+import org.vaucam.ui.theme.VauCamBrand
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -56,6 +57,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
@@ -108,7 +111,7 @@ import coil.ImageLoader
 import coil.decode.VideoFrameDecoder
 import org.vaucam.ui.components.controls.BottomBarControls
 import org.vaucam.ui.components.controls.ProManualControls
-import org.vaucam.ui.components.controls.RealmeYellow
+import org.vaucam.ui.components.controls.VauCamBrand.Accent
 import org.vaucam.ui.components.controls.TopBarControls
 import org.vaucam.ui.components.overlays.CountdownTimerOverlay
 import org.vaucam.ui.components.overlays.HistogramOverlay
@@ -842,13 +845,13 @@ fun CameraScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
-                        .border(1.5.dp, RealmeYellow, RoundedCornerShape(12.dp))
+                        .background(VauCamBrand.Glass, RoundedCornerShape(12.dp))
+                        .border(1.5.dp, VauCamBrand.Accent, RoundedCornerShape(12.dp))
                         .padding(horizontal = 18.dp, vertical = 10.dp)
                 ) {
                     Text(
                         text = uiState.aspectRatioMode.label,
-                        color = RealmeYellow,
+                        color = VauCamBrand.Accent,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Black
                     )
@@ -893,7 +896,7 @@ fun CameraScreen(
                     color = Color.White,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.72f), CircleShape)
+                        .background(VauCamBrand.Glass, CircleShape)
                         .clickable { lutPicker.launch(arrayOf("*/*")) }
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 )
@@ -967,7 +970,7 @@ fun CameraScreen(
                 ) {
                     Text(
                         text = String.format(Locale.US, "%.1fx", uiState.zoomLevel),
-                        color = Color.Yellow,
+                        color = VauCamBrand.Accent,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -986,7 +989,11 @@ fun CameraScreen(
         }
 
         // Pro Manual Dials Panel (Shown in PRO mode)
-        if (uiState.cameraMode == CameraMode.PRO) {
+        AnimatedVisibility(
+            visible = uiState.cameraMode == CameraMode.PRO,
+            enter = fadeIn(tween(180)) + expandVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)),
+            exit = fadeOut(tween(120)) + shrinkVertically(animationSpec = tween(180, easing = FastOutSlowInEasing))
+        ) {
             ProManualControls(
                 uiState = uiState,
                 onSetWhiteBalance = { viewModel.setProWhiteBalance(it) },
@@ -1183,7 +1190,7 @@ private fun RealmeFrameCorners(
         val h = size.height
         val bracketLen = 16.dp.toPx()
         val strokeW = 2.dp.toPx()
-        val color = RealmeYellow.copy(alpha = cornerAlpha)
+        val color = VauCamBrand.Accent.copy(alpha = cornerAlpha)
 
         // Top-Left
         drawLine(color, Offset(0f, 0f), Offset(bracketLen, 0f), strokeW, StrokeCap.Round)

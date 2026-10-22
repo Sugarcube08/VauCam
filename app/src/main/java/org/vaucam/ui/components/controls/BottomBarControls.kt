@@ -1,7 +1,9 @@
 package org.vaucam.ui.components.controls
 
+import org.vaucam.ui.theme.VauCamBrand
 import coil.ImageLoader
 import coil.compose.AsyncImage
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -105,7 +107,7 @@ fun BottomBarControls(
                         .size(52.dp)
                         .rotate(uiRotationDegrees)
                         .clip(CircleShape)
-                        .background(Color.DarkGray.copy(alpha = 0.75f))
+                        .background(VauCamBrand.Glass)
                         .border(1.5.dp, Color.White, CircleShape)
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -116,7 +118,7 @@ fun BottomBarControls(
                     Icon(
                         imageVector = if (uiState.isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
                         contentDescription = if (uiState.isRecordingPaused) "Resume Video" else "Pause Video",
-                        tint = if (uiState.isRecordingPaused) Color.Yellow else Color.White,
+                        tint = if (uiState.isRecordingPaused) VauCamBrand.Accent else Color.White,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -127,8 +129,8 @@ fun BottomBarControls(
                         .size(52.dp)
                         .rotate(uiRotationDegrees)
                         .clip(CircleShape)
-                        .background(Color.DarkGray)
-                        .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                        .background(VauCamBrand.SurfaceElevated)
+                        .border(1.5.dp, VauCamBrand.Outline, CircleShape)
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onOpenGallery()
@@ -196,12 +198,23 @@ fun BottomBarControls(
         ) {
             CameraMode.entries.forEach { mode ->
                 val isSelected = uiState.cameraMode == mode
+                val modeChipColor by animateColorAsState(
+                    targetValue = if (isSelected) VauCamBrand.Accent else Color.Transparent,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "cameraModeChip"
+                )
+                val modeTextColor by animateColorAsState(
+                    targetValue = if (isSelected) VauCamBrand.Ink else if (uiState.isRecording) {
+                        Color.White.copy(alpha = 0.35f)
+                    } else {
+                        Color.White
+                    },
+                    animationSpec = tween(durationMillis = 180),
+                    label = "cameraModeLabel"
+                )
                 Box(
                     modifier = Modifier
-                        .background(
-                            color = if (isSelected) Color.Yellow.copy(alpha = 0.2f) else Color.Transparent,
-                            shape = CircleShape
-                        )
+                        .background(color = modeChipColor, shape = CircleShape)
                         .clickable(enabled = !uiState.isRecording) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSelectMode(mode)
@@ -211,13 +224,7 @@ fun BottomBarControls(
                 ) {
                     Text(
                         text = mode.label,
-                        color = if (isSelected) {
-                            Color.Yellow
-                        } else if (uiState.isRecording) {
-                            Color.White.copy(alpha = 0.35f)
-                        } else {
-                            Color.White
-                        },
+                        color = modeTextColor,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
@@ -241,7 +248,7 @@ fun ShutterButton(
         label = "shutterInnerRadius"
     )
 
-    val ringColor = if (mode == CameraMode.PRO) Color.Yellow else Color.White
+    val ringColor = VauCamBrand.Accent
 
     Box(
         modifier = modifier
@@ -256,7 +263,7 @@ fun ShutterButton(
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Cancel Timer",
-                tint = Color.Yellow,
+                tint = VauCamBrand.Accent,
                 modifier = Modifier.size(36.dp)
             )
         } else {
