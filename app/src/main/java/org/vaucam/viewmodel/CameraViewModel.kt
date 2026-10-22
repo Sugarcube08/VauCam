@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.vaucam.camera.CaptureCoordinator
+import org.vaucam.data.database.MediaType
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -124,10 +126,18 @@ data class CameraUiState(
     val shutterFlashTrigger: Long = 0L,
     val isScreenFlashActive: Boolean = false,
     val ambientLux: Float? = null,
-    val histogramBins: List<Float> = List(64) { 0f }
+    val histogramBins: List<Float> = List(64) { 0f },
+    val protectedMediaCount: Int = 0
 )
 
-class CameraViewModel(application: Application) : AndroidViewModel(application) {
+class CameraViewModel(
+    application: Application,
+    coordinator: CaptureCoordinator? = null
+) : AndroidViewModel(application) {
+
+    private val captureCoordinator: CaptureCoordinator? by lazy {
+        coordinator ?: runCatching { CaptureCoordinator(application) }.getOrNull()
+    }
 
     private val prefs: SharedPreferences? = runCatching {
         application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -155,9 +165,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var videoCapture: VideoCapture<Recorder>? = null
     private var recording: Recording? = null
     private var countdownJob: Job? = null
+    private var activeVideoCaptureId: String? = null
 
     init {
         loadLatestMediaThumbnail()
+        observeProtectedMediaCount()
+    }
+
+    private fun observeProtectedMediaCount() {
+        viewModelScope.launch {
+            captureCoordinator?.protectedCount?.collect { count ->
+                _uiState.update { it.copy(protectedMediaCount = count) }
+            }
+        }
     }
 
     private fun loadFlashMode(key: String, defaultMode: Int): Int {
@@ -495,6 +515,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun capturePhoto() {
         val imageCapture = imageCapture ?: return
         viewModelScope.launch {
+            // Adjustment A: Pre-register durable capture intent BEFORE initiating camera operation
+            val captureId = captureCoordinator?.registerCaptureIntent(MediaType.PHOTO)
+
             val useScreenFlash = shouldTriggerFrontScreenFlash()
 
             if (useScreenFlash) {
@@ -527,6 +550,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onError(exc: ImageCaptureException) {
                         Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
+                        captureId?.let { id ->
+                            captureCoordinator?.onCaptureFailed(id, exc.message ?: "Photo capture failed")
+                        }
                         _uiState.update {
                             it.copy(
                                 photoCaptureProgress = null,
@@ -538,6 +564,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         val msg = "Photo capture succeeded: ${output.savedUri}"
                         Log.d(TAG, msg)
+                        output.savedUri?.let { uri ->
+                            val sizeBytes = runCatching {
+                                getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+                            }.getOrNull() ?: 0L
+
+                            captureId?.let { id ->
+                                captureCoordinator?.onCaptureSucceeded(
+                                    captureId = id,
+                                    outputUri = uri,
+                                    sizeBytes = sizeBytes,
+                                    mimeType = "image/jpeg",
+                                    displayName = name
+                                )
+                            }
+                        }
                         _uiState.update {
                             it.copy(
                                 lastCapturedMediaUri = output.savedUri.toString(),
@@ -573,80 +614,112 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/VauCam")
-        }
+        viewModelScope.launch {
+            // Adjustment A: Pre-register durable capture intent BEFORE initiating video recording
+            activeVideoCaptureId = captureCoordinator?.registerCaptureIntent(MediaType.VIDEO)
 
-        val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(
-            getApplication<Application>().contentResolver,
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        ).setContentValues(contentValues).build()
-
-        val hasAudioPermission = ContextCompat.checkSelfPermission(
-            getApplication(),
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-
-        recording = videoCapture.output
-            .prepareRecording(getApplication(), mediaStoreOutputOptions)
-            .apply {
-                if (hasAudioPermission && uiState.value.isAudioEnabled) {
-                    withAudioEnabled()
-                }
+            val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US).format(System.currentTimeMillis())
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/VauCam")
             }
-            .start(ContextCompat.getMainExecutor(getApplication())) { recordEvent ->
-                when (recordEvent) {
-                    is VideoRecordEvent.Start -> {
-                        _uiState.update {
-                            it.copy(
-                                isRecording = true,
-                                isRecordingPaused = false,
-                                recordingDurationSeconds = 0L
+
+            val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(
+                getApplication<Application>().contentResolver,
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            ).setContentValues(contentValues).build()
+
+            val hasAudioPermission = ContextCompat.checkSelfPermission(
+                getApplication(),
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+
+            recording = videoCapture.output
+                .prepareRecording(getApplication(), mediaStoreOutputOptions)
+                .apply {
+                    if (hasAudioPermission && uiState.value.isAudioEnabled) {
+                        withAudioEnabled()
+                    }
+                }
+                .start(ContextCompat.getMainExecutor(getApplication())) { recordEvent ->
+                    when (recordEvent) {
+                        is VideoRecordEvent.Start -> {
+                            _uiState.update {
+                                it.copy(
+                                    isRecording = true,
+                                    isRecordingPaused = false,
+                                    recordingDurationSeconds = 0L
+                                )
+                            }
+                        }
+                        is VideoRecordEvent.Status -> {
+                            val seconds = TimeUnit.NANOSECONDS.toSeconds(
+                                recordEvent.recordingStats.recordedDurationNanos
                             )
+                            _uiState.update { it.copy(recordingDurationSeconds = seconds) }
                         }
-                    }
-                    is VideoRecordEvent.Status -> {
-                        val seconds = TimeUnit.NANOSECONDS.toSeconds(
-                            recordEvent.recordingStats.recordedDurationNanos
-                        )
-                        _uiState.update { it.copy(recordingDurationSeconds = seconds) }
-                    }
-                    is VideoRecordEvent.Pause -> {
-                        _uiState.update { it.copy(isRecordingPaused = true) }
-                    }
-                    is VideoRecordEvent.Resume -> {
-                        _uiState.update { it.copy(isRecordingPaused = false) }
-                    }
-                    is VideoRecordEvent.Finalize -> {
-                        if (!recordEvent.hasError()) {
-                            val msg = "Video capture succeeded: ${recordEvent.outputResults.outputUri}"
-                            Log.d(TAG, msg)
-                            _uiState.update {
-                                it.copy(
-                                    lastCapturedMediaUri = recordEvent.outputResults.outputUri.toString(),
-                                    isRecording = false,
-                                    isRecordingPaused = false,
-                                    recordingDurationSeconds = 0L
-                                )
-                            }
-                        } else {
-                            recording?.close()
-                            recording = null
-                            Log.e(TAG, "Video capture ends with error: ${recordEvent.error}")
-                            _uiState.update {
-                                it.copy(
-                                    isRecording = false,
-                                    isRecordingPaused = false,
-                                    recordingDurationSeconds = 0L
-                                )
+                        is VideoRecordEvent.Pause -> {
+                            _uiState.update { it.copy(isRecordingPaused = true) }
+                        }
+                        is VideoRecordEvent.Resume -> {
+                            _uiState.update { it.copy(isRecordingPaused = false) }
+                        }
+                        is VideoRecordEvent.Finalize -> {
+                            val videoId = activeVideoCaptureId
+                            activeVideoCaptureId = null
+
+                            if (!recordEvent.hasError()) {
+                                val uri = recordEvent.outputResults.outputUri
+                                val msg = "Video capture succeeded: $uri"
+                                Log.d(TAG, msg)
+
+                                val sizeBytes = runCatching {
+                                    getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize }
+                                }.getOrNull() ?: 0L
+
+                                videoId?.let { id ->
+                                    captureCoordinator?.onCaptureSucceeded(
+                                        captureId = id,
+                                        outputUri = uri,
+                                        sizeBytes = sizeBytes,
+                                        mimeType = "video/mp4",
+                                        displayName = name
+                                    )
+                                }
+
+                                _uiState.update {
+                                    it.copy(
+                                        lastCapturedMediaUri = uri.toString(),
+                                        isRecording = false,
+                                        isRecordingPaused = false,
+                                        recordingDurationSeconds = 0L
+                                    )
+                                }
+                            } else {
+                                recording?.close()
+                                recording = null
+                                Log.e(TAG, "Video capture ends with error: ${recordEvent.error}")
+
+                                videoId?.let { id ->
+                                    captureCoordinator?.onCaptureFailed(
+                                        id,
+                                        "Video recording ended with error: ${recordEvent.error}"
+                                    )
+                                }
+
+                                _uiState.update {
+                                    it.copy(
+                                        isRecording = false,
+                                        isRecordingPaused = false,
+                                        recordingDurationSeconds = 0L
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
+        }
     }
 
     fun togglePauseResumeVideo() {
