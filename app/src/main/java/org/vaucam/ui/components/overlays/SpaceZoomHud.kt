@@ -1,5 +1,6 @@
 package org.vaucam.ui.components.overlays
 
+import org.vaucam.ui.theme.VauCamBrand
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -154,7 +155,7 @@ fun SpaceZoomHud(
         }
     }
 
-    val hudColor = if (isZoomLocked) Color.Yellow else Color.White
+    val hudColor = if (isZoomLocked) VauCamBrand.Accent else Color.White
 
     Box(modifier = modifier.fillMaxSize()) {
         // Center Aiming Reticle with Stability Progress Arc
@@ -173,7 +174,7 @@ fun SpaceZoomHud(
                 // Stability lock progress arc
                 if (stabilityProgress > 0f) {
                     drawArc(
-                        color = Color.Yellow,
+                        color = VauCamBrand.Accent,
                         startAngle = -90f,
                         sweepAngle = 360f * stabilityProgress,
                         useCenter = false,
