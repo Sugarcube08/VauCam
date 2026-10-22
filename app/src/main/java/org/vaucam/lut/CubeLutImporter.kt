@@ -13,7 +13,7 @@ object CubeLutImporter {
     private const val MAX_LUT_BYTES = 16 * 1024 * 1024
 
     @Throws(IOException::class, IllegalArgumentException::class)
-    fun import(resolver: ContentResolver, uri: Uri): CubeLut {
+    fun importLut(resolver: ContentResolver, uri: Uri): CubeLut {
         val name = queryDisplayName(resolver, uri)
         require(name == null || name.endsWith(".cube", ignoreCase = true)) {
             "Select a .cube LUT file"
