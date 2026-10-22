@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import org.vaucam.ui.theme.VauCamBrand
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,14 +68,27 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.statusBarColor = android.graphics.Color.rgb(8, 9, 11)
+        window.navigationBarColor = android.graphics.Color.rgb(8, 9, 11)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
 
         checkAndRequestPermissions()
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            MaterialTheme(colorScheme = darkColorScheme(
+                primary = VauCamBrand.Accent,
+                onPrimary = VauCamBrand.Ink,
+                secondary = VauCamBrand.AccentPressed,
+                background = VauCamBrand.Ink,
+                surface = VauCamBrand.Surface,
+                onBackground = VauCamBrand.TextPrimary,
+                onSurface = VauCamBrand.TextPrimary
+            )) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Color.Black
+                    color = VauCamBrand.Ink
                 ) {
                     if (hasCameraPermission) {
                         CameraScreen(viewModel = viewModel)
@@ -176,7 +190,7 @@ fun PermissionDeniedScreen(
             Icon(
                 imageVector = Icons.Default.CameraAlt,
                 contentDescription = "Camera Permission",
-                tint = Color.Yellow,
+                tint = VauCamBrand.Accent,
                 modifier = Modifier
                     .padding(20.dp)
                     .fillMaxSize()
@@ -207,8 +221,8 @@ fun PermissionDeniedScreen(
         Button(
             onClick = onRequestPermissions,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color.Yellow,
-                contentColor = Color.Black
+                containerColor = VauCamBrand.Accent,
+                contentColor = VauCamBrand.Ink
             )
         ) {
             Text(
