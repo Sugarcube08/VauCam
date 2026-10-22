@@ -3,6 +3,7 @@ package org.vaucam.ui.components.controls
 import org.vaucam.ui.theme.VauCamBrand
 import coil.ImageLoader
 import coil.compose.AsyncImage
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -197,12 +198,23 @@ fun BottomBarControls(
         ) {
             CameraMode.entries.forEach { mode ->
                 val isSelected = uiState.cameraMode == mode
+                val modeChipColor by animateColorAsState(
+                    targetValue = if (isSelected) VauCamBrand.Accent else Color.Transparent,
+                    animationSpec = tween(durationMillis = 180),
+                    label = "cameraModeChip"
+                )
+                val modeTextColor by animateColorAsState(
+                    targetValue = if (isSelected) VauCamBrand.Ink else if (uiState.isRecording) {
+                        Color.White.copy(alpha = 0.35f)
+                    } else {
+                        Color.White
+                    },
+                    animationSpec = tween(durationMillis = 180),
+                    label = "cameraModeLabel"
+                )
                 Box(
                     modifier = Modifier
-                        .background(
-                            color = if (isSelected) VauCamBrand.Accent else Color.Transparent,
-                            shape = CircleShape
-                        )
+                        .background(color = modeChipColor, shape = CircleShape)
                         .clickable(enabled = !uiState.isRecording) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSelectMode(mode)
@@ -212,13 +224,7 @@ fun BottomBarControls(
                 ) {
                     Text(
                         text = mode.label,
-                        color = if (isSelected) {
-                            VauCamBrand.Ink
-                        } else if (uiState.isRecording) {
-                            Color.White.copy(alpha = 0.35f)
-                        } else {
-                            Color.White
-                        },
+                        color = modeTextColor,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
