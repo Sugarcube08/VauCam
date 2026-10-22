@@ -106,7 +106,7 @@ fun BottomBarControls(
                         .size(52.dp)
                         .rotate(uiRotationDegrees)
                         .clip(CircleShape)
-                        .background(Color.DarkGray.copy(alpha = 0.75f))
+                        .background(VauCamBrand.Glass)
                         .border(1.5.dp, Color.White, CircleShape)
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -128,8 +128,8 @@ fun BottomBarControls(
                         .size(52.dp)
                         .rotate(uiRotationDegrees)
                         .clip(CircleShape)
-                        .background(Color.DarkGray)
-                        .border(1.5.dp, Color.White.copy(alpha = 0.6f), CircleShape)
+                        .background(VauCamBrand.SurfaceElevated)
+                        .border(1.5.dp, VauCamBrand.Outline, CircleShape)
                         .clickable {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onOpenGallery()
@@ -200,7 +200,7 @@ fun BottomBarControls(
                 Box(
                     modifier = Modifier
                         .background(
-                            color = if (isSelected) VauCamBrand.Accent.copy(alpha = 0.2f) else Color.Transparent,
+                            color = if (isSelected) VauCamBrand.Accent else Color.Transparent,
                             shape = CircleShape
                         )
                         .clickable(enabled = !uiState.isRecording) {
@@ -242,7 +242,7 @@ fun ShutterButton(
         label = "shutterInnerRadius"
     )
 
-    val ringColor = if (mode == CameraMode.PRO) VauCamBrand.Accent else Color.White
+    val ringColor = VauCamBrand.Accent
 
     Box(
         modifier = modifier
