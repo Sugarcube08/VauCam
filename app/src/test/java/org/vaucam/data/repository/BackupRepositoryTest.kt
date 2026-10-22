@@ -164,4 +164,32 @@ class BackupRepositoryTest {
         val secondResult = repository.executeBackup(record.id)
         assertTrue(secondResult is BackupExecutionResult.Success)
     }
+    @Test
+    fun `revalidates and repairs an existing protected copy when it is corrupted`() = runBlocking {
+        val record = repository.registerCaptureIntent(MediaType.PHOTO)
+        val originalFile = File(externalMediaDir, "repair_test.jpg")
+        originalFile.writeBytes("original_image_bytes".toByteArray())
+
+        repository.confirmCapture(
+            captureId = record.id,
+            originalUri = Uri.fromFile(originalFile),
+            originalPath = originalFile.absolutePath,
+            sizeBytes = originalFile.length(),
+            mimeType = "image/jpeg",
+            displayName = originalFile.name
+        )
+
+        val first = repository.executeBackup(record.id) as BackupExecutionResult.Success
+        first.protectedFile.writeBytes("corrupted".toByteArray())
+
+        val repaired = repository.executeBackup(record.id)
+        assertTrue("A corrupted private backup should be repaired from the original", repaired is BackupExecutionResult.Success)
+        val success = repaired as BackupExecutionResult.Success
+        assertEquals(originalFile.readBytes().toList(), success.protectedFile.readBytes().toList())
+
+        val finalRecord = dao.getById(record.id)
+        assertEquals(BackupState.PROTECTED, finalRecord?.state)
+        assertEquals(success.sha256, finalRecord?.protectedSha256)
+    }
+
 }
