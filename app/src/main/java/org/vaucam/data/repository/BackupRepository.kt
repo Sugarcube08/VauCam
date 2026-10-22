@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.vaucam.data.database.BackupState
 import org.vaucam.data.database.CaptureDao
@@ -12,6 +14,7 @@ import org.vaucam.data.database.MediaType
 import org.vaucam.data.storage.HashVerifier
 import org.vaucam.data.storage.ProtectedStorageManager
 import java.io.File
+import java.io.InputStream
 import java.util.UUID
 
 sealed class BackupExecutionResult {
@@ -24,17 +27,19 @@ class BackupRepository(
     private val captureDao: CaptureDao,
     private val storageManager: ProtectedStorageManager
 ) {
-
     val recentRecords: Flow<List<CaptureRecordEntity>> = captureDao.observeRecentRecords()
     val protectedCount: Flow<Int> = captureDao.observeProtectedCount()
 
-    /**
-     * Step 1: Pre-register durable capture intent BEFORE initiating camera hardware operation.
-     */
+    private val backupLocks = mutableMapOf<String, Mutex>()
+    private val locksGuard = Any()
+
+    private fun lockFor(captureId: String): Mutex = synchronized(locksGuard) {
+        backupLocks.getOrPut(captureId) { Mutex() }
+    }
+
     suspend fun registerCaptureIntent(mediaType: MediaType): CaptureRecordEntity = withContext(Dispatchers.IO) {
-        val id = UUID.randomUUID().toString()
         val record = CaptureRecordEntity(
-            id = id,
+            id = UUID.randomUUID().toString(),
             mediaType = mediaType,
             state = BackupState.CAPTURE_REQUESTED,
             createdAt = System.currentTimeMillis()
@@ -43,9 +48,6 @@ class BackupRepository(
         record
     }
 
-    /**
-     * Step 2: Confirm successful original capture output and transition to BACKUP_PENDING.
-     */
     suspend fun confirmCapture(
         captureId: String,
         originalUri: Uri,
@@ -54,6 +56,9 @@ class BackupRepository(
         mimeType: String?,
         displayName: String?
     ) = withContext(Dispatchers.IO) {
+        val existing = captureDao.getById(captureId)
+            ?: throw IllegalStateException("Capture intent $captureId was not found")
+        if (existing.state == BackupState.PROTECTED) return@withContext
         captureDao.updateCaptureSuccess(
             id = captureId,
             originalUri = originalUri.toString(),
@@ -66,112 +71,108 @@ class BackupRepository(
         )
     }
 
-    /**
-     * Record capture hardware failure before media was produced.
-     */
     suspend fun recordCaptureFailure(captureId: String, error: String) = withContext(Dispatchers.IO) {
         captureDao.updateState(captureId, BackupState.BACKUP_FAILED, error)
     }
 
     fun openSourceStream(uri: Uri): InputStream? {
         return if (uri.scheme == "file" || uri.scheme == null) {
-            val path = uri.path ?: return null
-            val file = File(path)
-            if (file.exists()) java.io.FileInputStream(file) else null
+            val file = uri.path?.let(::File) ?: return null
+            if (file.isFile) file.inputStream() else null
         } else {
             runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
         }
     }
 
-    /**
-     * Execute full atomic copy, hash verification, and commit to PROTECTED.
-     */
-    suspend fun executeBackup(captureId: String): BackupExecutionResult = withContext(Dispatchers.IO) {
-        val record = captureDao.getById(captureId)
-            ?: return@withContext BackupExecutionResult.Failure("Capture record $captureId not found", false)
+    suspend fun executeBackup(captureId: String): BackupExecutionResult =
+        lockFor(captureId).withLock {
+            withContext(Dispatchers.IO) {
+                val record = captureDao.getById(captureId)
+                    ?: return@withContext BackupExecutionResult.Failure("Capture record $captureId not found", false)
 
-        if (record.state == BackupState.PROTECTED) {
-            val file = record.protectedPath?.let { File(it) }
-            if (file != null && file.exists()) {
-                return@withContext BackupExecutionResult.Success(
-                    protectedFile = file,
-                    sha256 = record.protectedSha256.orEmpty(),
-                    sizeBytes = record.protectedSizeBytes ?: file.length()
-                )
+                if (record.state == BackupState.PROTECTED) {
+                    val file = record.protectedPath?.let(::File)
+                    if (file != null && file.isFile) {
+                        val digest = runCatching { HashVerifier.computeSha256(file) }.getOrNull()
+                        if (digest != null && digest.first == record.protectedSha256 &&
+                            digest.second == record.protectedSizeBytes
+                        ) {
+                            return@withContext BackupExecutionResult.Success(file, digest.first, digest.second)
+                        }
+                    }
+                    captureDao.updateState(
+                        captureId, BackupState.RECOVERY_REQUIRED,
+                        "Previously protected backup is missing or does not match its recorded digest"
+                    )
+                }
+
+                val latest = captureDao.getById(captureId)
+                    ?: return@withContext BackupExecutionResult.Failure("Capture record $captureId disappeared", false)
+                val originalUriString = latest.originalUri
+                    ?: return@withContext BackupExecutionResult.Failure("Original URI is missing for $captureId", false)
+                val uri = Uri.parse(originalUriString)
+
+                val check = openSourceStream(uri)
+                if (check == null) {
+                    captureDao.updateState(captureId, BackupState.SOURCE_MISSING, "Unable to open source URI: $uri")
+                    return@withContext BackupExecutionResult.Failure("Source original media missing at $uri", false)
+                }
+                check.use { }
+
+                captureDao.updateState(captureId, BackupState.BACKUP_IN_PROGRESS)
+                val stagingFile = storageManager.createStagingFile(captureId)
+                try {
+                    val (stagingHash, stagingSize) = openSourceStream(uri)?.use { input ->
+                        storageManager.streamToStagingWithDigest(input, stagingFile)
+                    } ?: throw IllegalStateException("Could not open input stream from $uri")
+
+                    captureDao.updateState(captureId, BackupState.VERIFYING)
+                    val (sourceHash, sourceSize) = openSourceStream(uri)?.use(HashVerifier::computeSha256)
+                        ?: throw IllegalStateException("Could not reopen original stream for verification")
+
+                    if (stagingHash != sourceHash || stagingSize != sourceSize) {
+                        stagingFile.delete()
+                        val message = "Integrity mismatch: source($sourceHash, $sourceSize B) vs backup($stagingHash, $stagingSize B)"
+                        captureDao.recordRetryFailure(captureId, message, BackupState.BACKUP_FAILED)
+                        return@withContext BackupExecutionResult.Failure(message, true)
+                    }
+
+                    val extension = if (latest.mediaType == MediaType.VIDEO) "mp4" else "jpg"
+                    val safeName = latest.displayName.orEmpty()
+                        .substringAfterLast('/')
+                        .substringAfterLast('\\')
+                        .replace(Regex("[^A-Za-z0-9._-]"), "_")
+                        .take(120)
+                        .takeIf(String::isNotBlank) ?: "$captureId.$extension"
+                    val protectedFile = storageManager.promoteToProtected(stagingFile, "${captureId}_$safeName")
+
+                    // Verify the promoted final artifact, not just the staging file.
+                    val finalDigest = HashVerifier.computeSha256(protectedFile)
+                    if (finalDigest.first != sourceHash || finalDigest.second != sourceSize) {
+                        protectedFile.delete()
+                        throw IllegalStateException("Promoted backup failed final integrity verification")
+                    }
+                    captureDao.updateVerificationSuccess(
+                        id = captureId,
+                        protectedPath = protectedFile.absolutePath,
+                        protectedSizeBytes = finalDigest.second,
+                        protectedSha256 = finalDigest.first,
+                        originalSha256 = sourceHash,
+                        verifiedAt = System.currentTimeMillis()
+                    )
+                    BackupExecutionResult.Success(protectedFile, finalDigest.first, finalDigest.second)
+                } catch (e: Exception) {
+                    stagingFile.delete()
+                    val error = e.message ?: "Backup execution failed"
+                    val retryable = latest.retryCount < MAX_RETRIES
+                    captureDao.recordRetryFailure(
+                        captureId, error,
+                        if (retryable) BackupState.BACKUP_PENDING else BackupState.BACKUP_FAILED
+                    )
+                    BackupExecutionResult.Failure(error, retryable)
+                }
             }
         }
-
-        val originalUriStr = record.originalUri
-            ?: return@withContext BackupExecutionResult.Failure("Original URI is missing for $captureId", false)
-
-        val uri = Uri.parse(originalUriStr)
-
-        // Verify source existence
-        val sourceCheckStream = openSourceStream(uri)
-        if (sourceCheckStream == null) {
-            captureDao.updateState(captureId, BackupState.SOURCE_MISSING, "Unable to open source URI: $uri")
-            return@withContext BackupExecutionResult.Failure("Source original media missing at $uri", false)
-        } else {
-            sourceCheckStream.close()
-        }
-
-        // Transition to BACKUP_IN_PROGRESS
-        captureDao.updateState(captureId, BackupState.BACKUP_IN_PROGRESS)
-
-        val stagingFile = storageManager.createStagingFile(captureId)
-
-        try {
-            // Stream original directly into staging while computing staging hash & size
-            val (stagingSha256, stagingBytes) = openSourceStream(uri)?.use { stream ->
-                storageManager.streamToStagingWithDigest(stream, stagingFile)
-            } ?: throw IllegalStateException("Could not open input stream from $uri")
-
-            // Transition to VERIFYING
-            captureDao.updateState(captureId, BackupState.VERIFYING)
-
-            // Re-read original to compute authoritative original SHA-256
-            val (originalSha256, originalBytes) = openSourceStream(uri)?.use { stream ->
-                HashVerifier.computeSha256(stream)
-            } ?: throw IllegalStateException("Could not re-open original stream for verification")
-
-            // Verify integrity match
-            if (stagingSha256 != originalSha256 || stagingBytes != originalBytes) {
-                stagingFile.delete()
-                val mismatchMsg = "Integrity mismatch: original($originalSha256, $originalBytes B) vs staging($stagingSha256, $stagingBytes B)"
-                captureDao.recordRetryFailure(captureId, mismatchMsg, BackupState.BACKUP_FAILED)
-                return@withContext BackupExecutionResult.Failure(mismatchMsg, isRetryable = true)
-            }
-
-            // Promote staging file atomically
-            val extension = if (record.mediaType == MediaType.VIDEO) "mp4" else "jpg"
-            val sanitizedName = record.displayName ?: "${captureId}.$extension"
-            val finalProtectedFile = storageManager.promoteToProtected(stagingFile, "${captureId}_$sanitizedName")
-
-            // Commit to Room as PROTECTED
-            val verifiedAt = System.currentTimeMillis()
-            captureDao.updateVerificationSuccess(
-                id = captureId,
-                protectedPath = finalProtectedFile.absolutePath,
-                protectedSizeBytes = stagingBytes,
-                protectedSha256 = stagingSha256,
-                originalSha256 = originalSha256,
-                verifiedAt = verifiedAt
-            )
-
-            BackupExecutionResult.Success(
-                protectedFile = finalProtectedFile,
-                sha256 = stagingSha256,
-                sizeBytes = stagingBytes
-            )
-        } catch (e: Exception) {
-            stagingFile.delete()
-            val errorMsg = e.message ?: "Backup execution failed"
-            val willRetry = record.retryCount < MAX_RETRIES
-            val nextState = if (willRetry) BackupState.BACKUP_PENDING else BackupState.BACKUP_FAILED
-            captureDao.recordRetryFailure(captureId, errorMsg, nextState)
-            BackupExecutionResult.Failure(errorMsg, isRetryable = willRetry)
-        }
-    }
 
     suspend fun getRecordById(id: String): CaptureRecordEntity? = withContext(Dispatchers.IO) {
         captureDao.getById(id)
