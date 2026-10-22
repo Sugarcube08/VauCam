@@ -34,9 +34,9 @@ class CubeLutBitmapProcessorTest {
         val actual = result.getPixel(0, 0)
 
         assertEquals(123, Color.alpha(actual))
-        assertEquals(128, Color.red(actual), 1)
-        assertEquals(64, Color.green(actual), 1)
-        assertEquals(192, Color.blue(actual), 1)
+        assertEquals(128, Color.red(actual))
+        assertEquals(64, Color.green(actual))
+        assertEquals(192, Color.blue(actual))
         assertEquals(Color.argb(123, 128, 64, 192), source.getPixel(0, 0))
 
         result.recycle()
