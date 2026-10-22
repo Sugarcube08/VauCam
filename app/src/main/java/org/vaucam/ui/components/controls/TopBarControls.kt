@@ -82,7 +82,7 @@ fun TopBarControls(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.55f), CircleShape)
+                .background(VauCamBrand.Glass, CircleShape)
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -160,7 +160,7 @@ fun TopBarControls(
             Box(
                 modifier = Modifier
                     .rotate(uiRotationDegrees)
-                    .background(Color.DarkGray.copy(alpha = 0.6f), CircleShape)
+                    .background(VauCamBrand.SurfaceElevated.copy(alpha = 0.9f), CircleShape)
                     .clickable(enabled = !uiState.isRecording) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onCycleAspectRatio()
