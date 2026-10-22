@@ -138,12 +138,19 @@ class BackupRepository(
                     }
 
                     val extension = if (latest.mediaType == MediaType.VIDEO) "mp4" else "jpg"
-                    val safeName = latest.displayName.orEmpty()
+                    val safeBaseName = latest.displayName.orEmpty()
                         .substringAfterLast('/')
                         .substringAfterLast('\\')
                         .replace(Regex("[^A-Za-z0-9._-]"), "_")
                         .take(120)
-                        .takeIf(String::isNotBlank) ?: "$captureId.$extension"
+                        .takeIf(String::isNotBlank) ?: captureId
+                    // MediaStore display names may omit their extension even when MIME_TYPE is set.
+                    // Keep protected copies usable by file managers and media players.
+                    val safeName = if (safeBaseName.substringAfterLast('.', "").isBlank()) {
+                        "$safeBaseName.$extension"
+                    } else {
+                        safeBaseName
+                    }
                     val protectedFile = storageManager.promoteToProtected(stagingFile, "${captureId}_$safeName")
 
                     // Verify the promoted final artifact, not just the staging file.
