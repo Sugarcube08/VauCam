@@ -968,7 +968,7 @@ fun CameraScreen(
                 ) {
                     Text(
                         text = String.format(Locale.US, "%.1fx", uiState.zoomLevel),
-                        color = Color.Yellow,
+                        color = VauCamBrand.Accent,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
