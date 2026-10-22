@@ -2,8 +2,6 @@ package org.vaucam.lut
 
 import java.io.BufferedReader
 import java.io.Reader
-import kotlin.math.ceil
-import kotlin.math.sqrt
 
 /**
  * Parsed 3D LUT from the common .cube interchange format.
