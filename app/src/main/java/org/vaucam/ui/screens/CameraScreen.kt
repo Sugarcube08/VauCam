@@ -843,7 +843,7 @@ fun CameraScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+                        .background(VauCamBrand.Glass, RoundedCornerShape(12.dp))
                         .border(1.5.dp, VauCamBrand.Accent, RoundedCornerShape(12.dp))
                         .padding(horizontal = 18.dp, vertical = 10.dp)
                 ) {
@@ -894,7 +894,7 @@ fun CameraScreen(
                     color = Color.White,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.72f), CircleShape)
+                        .background(VauCamBrand.Glass, CircleShape)
                         .clickable { lutPicker.launch(arrayOf("*/*")) }
                         .padding(horizontal = 12.dp, vertical = 8.dp)
                 )
