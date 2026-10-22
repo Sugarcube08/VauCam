@@ -43,10 +43,12 @@ class BackupRepositoryTest {
         cacheDir = tempFolder.newFolder("cache")
         externalMediaDir = tempFolder.newFolder("external_media")
 
+        val localFilesDir = filesDir
+        val localCacheDir = cacheDir
         val stubContext = object : android.content.ContextWrapper(null) {
             override fun getApplicationContext(): Context = this
-            override fun getFilesDir(): File = filesDir
-            override fun getCacheDir(): File = cacheDir
+            override fun getFilesDir(): File = localFilesDir
+            override fun getCacheDir(): File = localCacheDir
         }
 
         database = Room.inMemoryDatabaseBuilder(stubContext, VauCamDatabase::class.java)
