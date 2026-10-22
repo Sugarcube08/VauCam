@@ -45,9 +45,12 @@ import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -123,6 +126,14 @@ fun CameraScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val haptic = LocalHapticFeedback.current
+    val lutPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            viewModel.importLut(uri)
+        }
+    }
 
     val imageLoader = remember(context) {
         ImageLoader.Builder(context)
@@ -777,6 +788,41 @@ fun CameraScreen(
                 onToggleVideoHdr = { viewModel.toggleVideoHdr() },
                 modifier = Modifier.align(Alignment.TopCenter)
             )
+
+            // LUT import controls. This grades exported still copies; preview/video LUT processing is not yet wired.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 12.dp, top = 76.dp)
+            ) {
+                Text(
+                    text = if (uiState.activeLutTitle == null) "IMPORT LUT" else "LUT: ${uiState.activeLutTitle}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.72f), CircleShape)
+                        .clickable { lutPicker.launch(arrayOf("*/*")) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+                if (uiState.activeLutTitle != null) {
+                    Text(
+                        text = "Disable",
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .padding(top = 4.dp, start = 8.dp)
+                            .clickable { viewModel.clearLut() }
+                    )
+                }
+                uiState.lutError?.let { error ->
+                    Text(
+                        text = error,
+                        color = Color(0xFFFF8A80),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
 
             // Video Recording Timer Pill (MM:SS + Pause status)
             RecordingTimerPill(
