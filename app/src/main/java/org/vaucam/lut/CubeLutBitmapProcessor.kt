@@ -51,20 +51,17 @@ object CubeLutBitmapProcessor {
                 val tg = ng - g0
                 val tb = nb - b0
 
-                val out = FloatArray(3)
-                for (channel in 0..2) {
+                fun interpolate(channel: Int): Float {
                     val c00 = mix(channelAt(r0, g0, b0, channel), channelAt(r1, g0, b0, channel), tr)
                     val c10 = mix(channelAt(r0, g1, b0, channel), channelAt(r1, g1, b0, channel), tr)
                     val c01 = mix(channelAt(r0, g0, b1, channel), channelAt(r1, g0, b1, channel), tr)
                     val c11 = mix(channelAt(r0, g1, b1, channel), channelAt(r1, g1, b1, channel), tr)
-                    val c0 = mix(c00, c10, tg)
-                    val c1 = mix(c01, c11, tg)
-                    out[channel] = mix(c0, c1, tb).coerceIn(0f, 1f)
+                    return mix(mix(c00, c10, tg), mix(c01, c11, tg), tb).coerceIn(0f, 1f)
                 }
 
-                val outR = (out[0] * 255f + 0.5f).toInt().coerceIn(0, 255)
-                val outG = (out[1] * 255f + 0.5f).toInt().coerceIn(0, 255)
-                val outB = (out[2] * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val outR = (interpolate(0) * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val outG = (interpolate(1) * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val outB = (interpolate(2) * 255f + 0.5f).toInt().coerceIn(0, 255)
                 row[x] = (pixel and -0x1000000) or (outR shl 16) or (outG shl 8) or outB
             }
             output.setPixels(row, 0, source.width, 0, y, source.width, 1)
