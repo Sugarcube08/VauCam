@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.vaucam.data.database.CaptureRecordEntity
@@ -18,38 +19,31 @@ import org.vaucam.data.storage.ProtectedStorageManager
 import org.vaucam.platform.background.MediaBackupWorker
 import org.vaucam.platform.background.ReconciliationWorker
 
+/** Bridges CameraX callbacks to durable backup state and background retry. */
 class CaptureCoordinator(
     private val context: Context,
     val repository: BackupRepository = BackupRepository(
-        context,
+        context.applicationContext,
         VauCamDatabase.getInstance(context).captureDao(),
-        ProtectedStorageManager(context)
+        ProtectedStorageManager(context.applicationContext)
     )
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val workManager = WorkManager.getInstance(context)
+    private val workManager = WorkManager.getInstance(context.applicationContext)
 
     val recentCaptures: Flow<List<CaptureRecordEntity>> = repository.recentRecords
     val protectedCount: Flow<Int> = repository.protectedCount
 
     init {
-        // Schedule periodic reconciliation in the background
-        ReconciliationWorker.schedulePeriodic(context)
+        ReconciliationWorker.schedulePeriodic(context.applicationContext)
     }
 
-    /**
-     * Adjustment A: Register intent BEFORE hardware capture is initiated.
-     * Returns the unique capture ID to track the in-flight operation.
-     */
     suspend fun registerCaptureIntent(mediaType: MediaType): String {
         val record = repository.registerCaptureIntent(mediaType)
         Log.d(TAG, "Registered capture intent: ${record.id} for $mediaType")
         return record.id
     }
 
-    /**
-     * Called when original media is saved successfully to disk/MediaStore.
-     */
     fun onCaptureSucceeded(
         captureId: String,
         outputUri: Uri,
@@ -60,7 +54,6 @@ class CaptureCoordinator(
     ) {
         scope.launch {
             try {
-                // Confirm capture in Room
                 repository.confirmCapture(
                     captureId = captureId,
                     originalUri = outputUri,
@@ -69,35 +62,26 @@ class CaptureCoordinator(
                     mimeType = mimeType,
                     displayName = displayName
                 )
-
-                // Enqueue durable WorkManager job to survive process termination
-                val workRequest = MediaBackupWorker.buildWorkRequest(captureId)
+                // KEEP prevents a callback/reconciliation race from replacing an active worker.
                 workManager.enqueueUniqueWork(
                     "backup_$captureId",
-                    ExistingWorkPolicy.REPLACE,
-                    workRequest
+                    ExistingWorkPolicy.KEEP,
+                    MediaBackupWorker.buildWorkRequest(captureId)
                 )
-
-                // Also immediately execute in foreground coroutine for instant protection
-                repository.executeBackup(captureId)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to coordinate capture success for $captureId", e)
             }
         }
     }
 
-    /**
-     * Called when capture hardware or saving fails.
-     */
     fun onCaptureFailed(captureId: String, error: String) {
         scope.launch {
-            try {
-                repository.recordCaptureFailure(captureId, error)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to record capture failure for $captureId", e)
-            }
+            runCatching { repository.recordCaptureFailure(captureId, error) }
+                .onFailure { Log.e(TAG, "Failed to record capture failure for $captureId", it) }
         }
     }
+
+    fun close() = scope.cancel()
 
     companion object {
         private const val TAG = "CaptureCoordinator"

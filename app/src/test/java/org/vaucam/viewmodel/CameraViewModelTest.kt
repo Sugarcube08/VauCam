@@ -1,23 +1,39 @@
 package org.vaucam.viewmodel
 
 import android.app.Application
-import android.content.SharedPreferences
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 
+@RunWith(RobolectricTestRunner::class)
 class CameraViewModelTest {
 
     private lateinit var viewModel: CameraViewModel
 
     @Before
     fun setUp() {
-        viewModel = CameraViewModel(Application())
+        // AndroidViewModel's viewModelScope uses Dispatchers.Main; install a deterministic
+        // test dispatcher for local JVM tests where the Android Main looper is unavailable.
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+        viewModel = CameraViewModel(RuntimeEnvironment.getApplication<Application>())
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test

@@ -10,50 +10,63 @@ import java.security.MessageDigest
 
 class ProtectedStorageManager(context: Context) {
 
-    val protectedDir: File = context.filesDir.resolve("protected_media").also { it.mkdirs() }
-    val stagingDir: File = context.cacheDir.resolve("backup_staging").also { it.mkdirs() }
-
-    /**
-     * Creates a unique temporary file in the staging directory.
-     */
-    fun createStagingFile(captureId: String): File {
-        return File(stagingDir, "${captureId}_${System.currentTimeMillis()}.tmp")
+    val protectedDir: File = context.filesDir.resolve("protected_media").also {
+        check(it.exists() || it.mkdirs()) { "Could not create protected media directory" }
+    }
+    val stagingDir: File = context.cacheDir.resolve("backup_staging").also {
+        check(it.exists() || it.mkdirs()) { "Could not create backup staging directory" }
     }
 
-    /**
-     * Streams data from [sourceStream] into [targetTempFile], simultaneously
-     * computing the SHA-256 hash and byte count. Flushes and syncs to disk.
-     */
+    fun createStagingFile(captureId: String): File {
+        val safeId = captureId.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        return File(stagingDir, "${safeId}_${System.currentTimeMillis()}.tmp")
+    }
+
     fun streamToStagingWithDigest(
         sourceStream: InputStream,
         targetTempFile: File
     ): Pair<String, Long> {
+        require(targetTempFile.canonicalFile.parentFile == stagingDir.canonicalFile) {
+            "Staging target must be a direct child of the staging directory"
+        }
         val digest = MessageDigest.getInstance("SHA-256")
         val buffer = ByteArray(64 * 1024)
         var totalBytes = 0L
 
         sourceStream.use { input ->
             FileOutputStream(targetTempFile).use { output ->
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    digest.update(buffer, 0, bytesRead)
-                    output.write(buffer, 0, bytesRead)
-                    totalBytes += bytesRead
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (count == 0) continue
+                    digest.update(buffer, 0, count)
+                    output.write(buffer, 0, count)
+                    totalBytes += count
                 }
                 output.flush()
-                output.fd.sync() // Ensure physical disk persistence
+                output.fd.sync()
             }
         }
-
-        val hashHex = toHex(digest.digest())
-        return Pair(hashHex, totalBytes)
+        return toHex(digest.digest()) to totalBytes
     }
 
-    /**
-     * Atomically promotes a verified staging file to the permanent protected directory.
-     */
+    /** Only promote a staging child into the private protected directory. */
     fun promoteToProtected(stagingFile: File, finalFileName: String): File {
-        val finalFile = File(protectedDir, finalFileName)
+        require(stagingFile.canonicalFile.parentFile == stagingDir.canonicalFile) {
+            "Source must be a direct child of the staging directory"
+        }
+        val safeName = finalFileName
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .take(180)
+        require(safeName.isNotBlank() && safeName != "." && safeName != "..") {
+            "Invalid protected file name"
+        }
+        val finalFile = File(protectedDir, safeName)
+        check(finalFile.canonicalFile.parentFile == protectedDir.canonicalFile) {
+            "Destination must be a direct child of the protected directory"
+        }
         try {
             Files.move(
                 stagingFile.toPath(),
@@ -62,40 +75,39 @@ class ProtectedStorageManager(context: Context) {
                 StandardCopyOption.REPLACE_EXISTING
             )
         } catch (_: Exception) {
-            // Fallback for filesystems that do not support ATOMIC_MOVE across mount points
             if (!stagingFile.renameTo(finalFile)) {
                 Files.copy(stagingFile.toPath(), finalFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                stagingFile.delete()
+                FileOutputStream(finalFile, true).use { it.fd.sync() }
+                check(stagingFile.delete() || !stagingFile.exists()) {
+                    "Could not remove staging file after protected copy"
+                }
             }
         }
+        check(finalFile.isFile) { "Protected file was not created" }
         return finalFile
     }
 
-    /**
-     * Cleans up orphaned staging temporary files older than [maxAgeMs].
-     */
-    fun cleanupStaging(maxAgeMs: Long = 3600_000L) {
+    fun cleanupStaging(maxAgeMs: Long = 3_600_000L) {
         val now = System.currentTimeMillis()
         stagingDir.listFiles()?.forEach { file ->
-            if (file.isFile && (now - file.lastModified()) > maxAgeMs) {
-                file.delete()
-            }
+            if (file.isFile && now - file.lastModified() > maxAgeMs) file.delete()
         }
     }
 
     fun getProtectedFile(fileName: String): File? {
-        val file = File(protectedDir, fileName)
-        return if (file.exists()) file else null
+        val safeName = fileName.substringAfterLast('/').substringAfterLast('\\')
+        val file = File(protectedDir, safeName)
+        return if (file.canonicalFile.parentFile == protectedDir.canonicalFile && file.isFile) file else null
     }
 
     private fun toHex(bytes: ByteArray): String {
-        val hexChars = CharArray(bytes.size * 2)
+        val chars = CharArray(bytes.size * 2)
         val lookup = "0123456789abcdef"
         for (i in bytes.indices) {
-            val v = bytes[i].toInt() and 0xFF
-            hexChars[i * 2] = lookup[v ushr 4]
-            hexChars[i * 2 + 1] = lookup[v and 0x0F]
+            val value = bytes[i].toInt() and 0xFF
+            chars[i * 2] = lookup[value ushr 4]
+            chars[i * 2 + 1] = lookup[value and 0x0F]
         }
-        return String(hexChars)
+        return String(chars)
     }
 }

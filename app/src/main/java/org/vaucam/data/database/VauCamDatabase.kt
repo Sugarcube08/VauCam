@@ -26,9 +26,11 @@ abstract class VauCamDatabase : RoomDatabase() {
                     context.applicationContext,
                     VauCamDatabase::class.java,
                     DATABASE_NAME
-                ).fallbackToDestructiveMigration()
-                 .build()
-                 .also { instance = it }
+                )
+                    // Never silently erase the capture ledger. Future schema changes must
+                    // declare explicit migrations; a failed migration should fail visibly.
+                    .build()
+                    .also { instance = it }
             }
         }
     }

@@ -3,7 +3,7 @@ package org.vaucam.data.storage
 import android.content.Context
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -25,64 +25,95 @@ class ProtectedStorageManagerTest {
     fun setUp() {
         filesDir = tempFolder.newFolder("files")
         cacheDir = tempFolder.newFolder("cache")
-
-        // Create a stub context delegating filesDir and cacheDir
+        // Capture outer paths into locals before entering the ContextWrapper. Referencing
+        // the same-named getters here would recursively call the overrides and overflow.
+        val localFilesDir = filesDir
+        val localCacheDir = cacheDir
         val stubContext = object : android.content.ContextWrapper(null) {
-            override fun getFilesDir(): File = filesDir
-            override fun getCacheDir(): File = cacheDir
+            override fun getFilesDir(): File = localFilesDir
+            override fun getCacheDir(): File = localCacheDir
         }
         storageManager = ProtectedStorageManager(stubContext)
     }
 
     @Test
-    fun `streamToStagingWithDigest writes data and calculates SHA-256 and size accurately`() {
+    fun `streamToStagingWithDigest writes bytes and calculates SHA-256 accurately`() {
         val testData = "vaucam_protected_payload_test".toByteArray(Charsets.UTF_8)
         val stagingFile = storageManager.createStagingFile("test-capture-1")
-
         val (hash, bytes) = storageManager.streamToStagingWithDigest(
-            ByteArrayInputStream(testData),
-            stagingFile
+            ByteArrayInputStream(testData), stagingFile
         )
 
         assertTrue(stagingFile.exists())
         assertEquals(testData.size.toLong(), bytes)
         assertEquals(testData.size.toLong(), stagingFile.length())
-
-        val (expectedHash, expectedBytes) = HashVerifier.computeSha256(ByteArrayInputStream(testData))
+        val (expectedHash, expectedBytes) =
+            HashVerifier.computeSha256(ByteArrayInputStream(testData))
         assertEquals(expectedHash, hash)
         assertEquals(expectedBytes, bytes)
     }
 
     @Test
-    fun `promoteToProtected atomically moves file from staging to protected directory`() {
+    fun `promoteToProtected moves staging file under a safe name`() {
         val testData = "atomic_promotion_data".toByteArray()
         val stagingFile = storageManager.createStagingFile("test-capture-2")
         stagingFile.writeBytes(testData)
 
-        assertTrue(stagingFile.exists())
-
-        val finalFileName = "test-capture-2_final.jpg"
-        val protectedFile = storageManager.promoteToProtected(stagingFile, finalFileName)
+        val protectedFile = storageManager.promoteToProtected(
+            stagingFile, "test-capture-2_final.jpg"
+        )
 
         assertFalse(stagingFile.exists())
         assertTrue(protectedFile.exists())
-        assertEquals(File(storageManager.protectedDir, finalFileName).absolutePath, protectedFile.absolutePath)
+        assertEquals(
+            File(storageManager.protectedDir, "test-capture-2_final.jpg").absolutePath,
+            protectedFile.absolutePath
+        )
         assertEquals(testData.size.toLong(), protectedFile.length())
     }
 
     @Test
-    fun `cleanupStaging removes old temporary staging files`() {
+    fun `promoteToProtected strips path traversal from destination name`() {
+        val stagingFile = storageManager.createStagingFile("capture")
+        stagingFile.writeText("payload")
+
+        val protectedFile = storageManager.promoteToProtected(stagingFile, "../../escape.jpg")
+
+        assertEquals(storageManager.protectedDir.canonicalFile, protectedFile.canonicalFile.parentFile)
+        assertTrue(protectedFile.isFile)
+    }
+
+    @Test
+    fun `promoteToProtected rejects a source outside staging directory`() {
+        val outside = File(filesDir, "outside.tmp")
+        outside.writeText("payload")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            storageManager.promoteToProtected(outside, "safe.jpg")
+        }
+    }
+
+    @Test
+    fun `streamToStagingWithDigest rejects a target outside staging directory`() {
+        val outside = File(filesDir, "outside.tmp")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            storageManager.streamToStagingWithDigest(ByteArrayInputStream(byteArrayOf(1)), outside)
+        }
+    }
+
+    @Test
+    fun `cleanupStaging removes old temporary files and retains recent ones`() {
         val oldFile = storageManager.createStagingFile("old-capture")
         oldFile.writeBytes(byteArrayOf(1, 2, 3))
-        // Set timestamp back by 2 hours
-        oldFile.setLastModified(System.currentTimeMillis() - 7200_000L)
+        oldFile.setLastModified(System.currentTimeMillis() - 7_200_000L)
 
         val freshFile = storageManager.createStagingFile("fresh-capture")
         freshFile.writeBytes(byteArrayOf(4, 5, 6))
 
-        storageManager.cleanupStaging(maxAgeMs = 3600_000L)
+        storageManager.cleanupStaging(maxAgeMs = 3_600_000L)
 
-        assertFalse("Old staging file should be deleted", oldFile.exists())
-        assertTrue("Fresh staging file should be retained", freshFile.exists())
+        assertFalse(oldFile.exists())
+        assertTrue(freshFile.exists())
     }
 }

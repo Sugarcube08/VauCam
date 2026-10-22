@@ -1,5 +1,6 @@
 package org.vaucam.data.repository
 
+import android.app.Application
 import android.content.Context
 import android.net.Uri
 import androidx.room.Room
@@ -12,6 +13,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.junit.rules.TemporaryFolder
 import org.vaucam.data.database.BackupState
 import org.vaucam.data.database.CaptureDao
@@ -23,6 +27,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 
+@RunWith(RobolectricTestRunner::class)
 class BackupRepositoryTest {
 
     @get:Rule
@@ -43,10 +48,13 @@ class BackupRepositoryTest {
         cacheDir = tempFolder.newFolder("cache")
         externalMediaDir = tempFolder.newFolder("external_media")
 
-        val stubContext = object : android.content.ContextWrapper(null) {
+        val localFilesDir = filesDir
+        val localCacheDir = cacheDir
+        val application = RuntimeEnvironment.getApplication<Application>()
+        val stubContext = object : android.content.ContextWrapper(application) {
             override fun getApplicationContext(): Context = this
-            override fun getFilesDir(): File = filesDir
-            override fun getCacheDir(): File = cacheDir
+            override fun getFilesDir(): File = localFilesDir
+            override fun getCacheDir(): File = localCacheDir
         }
 
         database = Room.inMemoryDatabaseBuilder(stubContext, VauCamDatabase::class.java)
@@ -164,4 +172,32 @@ class BackupRepositoryTest {
         val secondResult = repository.executeBackup(record.id)
         assertTrue(secondResult is BackupExecutionResult.Success)
     }
+    @Test
+    fun `revalidates and repairs an existing protected copy when it is corrupted`() = runBlocking {
+        val record = repository.registerCaptureIntent(MediaType.PHOTO)
+        val originalFile = File(externalMediaDir, "repair_test.jpg")
+        originalFile.writeBytes("original_image_bytes".toByteArray())
+
+        repository.confirmCapture(
+            captureId = record.id,
+            originalUri = Uri.fromFile(originalFile),
+            originalPath = originalFile.absolutePath,
+            sizeBytes = originalFile.length(),
+            mimeType = "image/jpeg",
+            displayName = originalFile.name
+        )
+
+        val first = repository.executeBackup(record.id) as BackupExecutionResult.Success
+        first.protectedFile.writeBytes("corrupted".toByteArray())
+
+        val repaired = repository.executeBackup(record.id)
+        assertTrue("A corrupted private backup should be repaired from the original", repaired is BackupExecutionResult.Success)
+        val success = repaired as BackupExecutionResult.Success
+        assertEquals(originalFile.readBytes().toList(), success.protectedFile.readBytes().toList())
+
+        val finalRecord = dao.getById(record.id)
+        assertEquals(BackupState.PROTECTED, finalRecord?.state)
+        assertEquals(success.sha256, finalRecord?.protectedSha256)
+    }
+
 }
