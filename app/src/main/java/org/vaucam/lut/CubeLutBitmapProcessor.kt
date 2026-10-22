@@ -14,8 +14,14 @@ object CubeLutBitmapProcessor {
 
     fun apply(source: Bitmap, lut: CubeLut): Bitmap {
         require(source.width > 0 && source.height > 0) { "Source bitmap is empty" }
-        val output = source.copy(Bitmap.Config.ARGB_8888, true)
-            ?: throw IllegalStateException("Could not allocate bitmap for LUT processing")
+        // BitmapFactory can decode into a mutable ARGB bitmap; reuse it to avoid
+        // doubling peak memory for multi-megapixel camera captures.
+        val output = if (source.isMutable && source.config == Bitmap.Config.ARGB_8888) {
+            source
+        } else {
+            source.copy(Bitmap.Config.ARGB_8888, true)
+                ?: throw IllegalStateException("Could not allocate bitmap for LUT processing")
+        }
 
         val row = IntArray(source.width)
         val size = lut.size
