@@ -50,7 +50,7 @@ class BackupRepositoryTest {
 
         val localFilesDir = filesDir
         val localCacheDir = cacheDir
-        val application = RuntimeEnvironment.getApplication<Application>()
+        val application = RuntimeEnvironment.getApplication()
         val stubContext = object : android.content.ContextWrapper(application) {
             override fun getApplicationContext(): Context = this
             override fun getFilesDir(): File = localFilesDir
