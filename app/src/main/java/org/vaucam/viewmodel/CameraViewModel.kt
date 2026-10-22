@@ -784,9 +784,10 @@ class CameraViewModel(
             var sourceBitmap: android.graphics.Bitmap? = null
             var editedBitmap: android.graphics.Bitmap? = null
             try {
-                sourceBitmap = resolver.openInputStream(sourceUri)?.use { BitmapFactory.decodeStream(it) }
+                val decodedBitmap = resolver.openInputStream(sourceUri)?.use { BitmapFactory.decodeStream(it) }
                     ?: throw IllegalStateException("Could not decode captured photo")
-                val bitmapForExport = CubeLutBitmapProcessor.apply(sourceBitmap, lut)
+                sourceBitmap = decodedBitmap
+                val bitmapForExport = CubeLutBitmapProcessor.apply(decodedBitmap, lut)
                 editedBitmap = bitmapForExport
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, "${originalName.substringBeforeLast('.', originalName)}_LUT.jpg")
