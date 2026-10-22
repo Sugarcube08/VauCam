@@ -77,42 +77,17 @@ fun BottomBarControls(
             .padding(bottom = 24.dp, top = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Quick Zoom Selector Pill
+        // Realme Circular Zoom Wheel
         if (zoomOptions.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .padding(bottom = 14.dp)
-                    .background(Color.DarkGray.copy(alpha = 0.55f), CircleShape)
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                zoomOptions.forEach { zoom ->
-                    val isSelected = abs(uiState.zoomLevel - zoom) < 0.08f
-                    val text = if (zoom % 1f == 0f) "${zoom.toInt()}x" else "${zoom}x"
-                    Box(
-                        modifier = Modifier
-                            .rotate(uiRotationDegrees)
-                            .background(
-                                color = if (isSelected) Color.Yellow.copy(alpha = 0.22f) else Color.Transparent,
-                                shape = CircleShape
-                            )
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSelectZoom(zoom)
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = text,
-                            color = if (isSelected) Color.Yellow else Color.White,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
+            CircularZoomWheel(
+                currentZoom = uiState.zoomLevel,
+                minZoom = zoomOptions.firstOrNull() ?: 0.5f,
+                maxZoom = zoomOptions.lastOrNull() ?: 10f,
+                zoomOptions = zoomOptions,
+                uiRotationDegrees = uiRotationDegrees,
+                onZoomChanged = onSelectZoom,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
         }
 
         // Main Controls Row (Gallery / Pause | Shutter | Flip Lens)
