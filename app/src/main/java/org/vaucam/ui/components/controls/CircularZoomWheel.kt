@@ -2,6 +2,7 @@
 
 package org.vaucam.ui.components.controls
 
+import org.vaucam.ui.theme.VauCamBrand
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -70,8 +71,8 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // Realme signature yellow accent
-val RealmeYellow = Color(0xFFFFCC00)
-val RealmeDarkBg = Color(0xCC111111)
+val VauCamBrand.Accent = Color(0xFFFFCC00)
+val VauCamBrand.Glass = Color(0xCC111111)
 
 /**
  * Realme Camera-style Circular Zoom Wheel with:
@@ -196,7 +197,7 @@ private fun RealmeCompactZoomSelector(
                     .rotate(uiRotationDegrees)
                     .clip(CircleShape)
                     .background(
-                        if (isSelected) RealmeYellow else Color.Transparent
+                        if (isSelected) VauCamBrand.Accent else Color.Transparent
                     )
                     .clickable {
                         if (isSelected) {
@@ -257,7 +258,7 @@ private fun RealmeArcZoomDial(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(RealmeDarkBg, RoundedCornerShape(20.dp))
+            .background(VauCamBrand.Glass, RoundedCornerShape(20.dp))
             .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
             .padding(top = 10.dp, bottom = 12.dp, start = 12.dp, end = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -273,7 +274,7 @@ private fun RealmeArcZoomDial(
             Row(
                 modifier = Modifier
                     .background(Color.Black.copy(alpha = 0.8f), CircleShape)
-                    .border(1.5.dp, RealmeYellow, CircleShape)
+                    .border(1.5.dp, VauCamBrand.Accent, CircleShape)
                     .padding(horizontal = 16.dp, vertical = 5.dp)
                     .rotate(uiRotationDegrees),
                 verticalAlignment = Alignment.CenterVertically,
@@ -281,13 +282,13 @@ private fun RealmeArcZoomDial(
             ) {
                 Text(
                     text = String.format(Locale.US, "%.1f", currentZoom),
-                    color = RealmeYellow,
+                    color = VauCamBrand.Accent,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Black
                 )
                 Text(
                     text = "X",
-                    color = RealmeYellow,
+                    color = VauCamBrand.Accent,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -365,7 +366,7 @@ private fun RealmeArcZoomDial(
 
                         val tickHeight = if (isMajorStop) 22.dp.toPx() else 11.dp.toPx()
                         val tickColor = if (isMajorStop) {
-                            RealmeYellow.copy(alpha = alpha)
+                            VauCamBrand.Accent.copy(alpha = alpha)
                         } else {
                             Color.White.copy(alpha = alpha * 0.45f)
                         }
@@ -385,7 +386,7 @@ private fun RealmeArcZoomDial(
 
                 // Center Indicator Needle in Realme Yellow
                 drawLine(
-                    color = RealmeYellow,
+                    color = VauCamBrand.Accent,
                     start = Offset(centerX, pointerTop),
                     end = Offset(centerX, pointerBottom),
                     strokeWidth = 3.dp.toPx(),
@@ -394,7 +395,7 @@ private fun RealmeArcZoomDial(
 
                 // Needle triangular indicator dot
                 drawCircle(
-                    color = RealmeYellow,
+                    color = VauCamBrand.Accent,
                     radius = 3.5.dp.toPx(),
                     center = Offset(centerX, pointerTop)
                 )
@@ -415,7 +416,7 @@ private fun RealmeArcZoomDial(
 
                 Text(
                     text = label,
-                    color = if (isSelected) RealmeYellow else Color.White.copy(alpha = 0.65f),
+                    color = if (isSelected) VauCamBrand.Accent else Color.White.copy(alpha = 0.65f),
                     fontSize = 12.sp,
                     fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium,
                     modifier = Modifier
