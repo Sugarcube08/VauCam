@@ -154,3 +154,64 @@ class CaptureDaoTest {
         assertEquals(3, interrupted.size)
     }
 }
+    @Test
+    fun `findOrphanCaptureIntent matches stale intent by media type and narrow time window`() = runBlocking {
+        val captureTime = 1_765_000_000_000L
+        dao.insert(
+            CaptureRecordEntity(
+                id = "orphan-photo",
+                mediaType = MediaType.PHOTO,
+                state = BackupState.RECOVERY_REQUIRED,
+                createdAt = captureTime + 250L
+            )
+        )
+        dao.insert(
+            CaptureRecordEntity(
+                id = "wrong-media-type",
+                mediaType = MediaType.VIDEO,
+                state = BackupState.RECOVERY_REQUIRED,
+                createdAt = captureTime
+            )
+        )
+
+        val match = dao.findOrphanCaptureIntent(
+            mediaType = MediaType.PHOTO,
+            windowStart = captureTime - 10_000L,
+            windowEnd = captureTime + 10_000L,
+            capturedAt = captureTime
+        )
+
+        assertEquals("orphan-photo", match?.id)
+    }
+
+    @Test
+    fun `findOrphanCaptureIntent does not match completed or already linked records`() = runBlocking {
+        val captureTime = 1_765_000_000_000L
+        dao.insert(
+            CaptureRecordEntity(
+                id = "already-protected",
+                mediaType = MediaType.PHOTO,
+                state = BackupState.PROTECTED,
+                createdAt = captureTime
+            )
+        )
+        dao.insert(
+            CaptureRecordEntity(
+                id = "already-linked",
+                mediaType = MediaType.PHOTO,
+                state = BackupState.RECOVERY_REQUIRED,
+                createdAt = captureTime,
+                originalUri = "content://media/123"
+            )
+        )
+
+        val match = dao.findOrphanCaptureIntent(
+            mediaType = MediaType.PHOTO,
+            windowStart = captureTime - 10_000L,
+            windowEnd = captureTime + 10_000L,
+            capturedAt = captureTime
+        )
+
+        assertNull(match)
+    }
+
