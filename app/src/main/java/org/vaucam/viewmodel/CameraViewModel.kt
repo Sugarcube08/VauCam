@@ -136,7 +136,7 @@ data class CameraUiState(
     val lutError: String? = null
 )
 
-class CameraViewModel(
+class CameraViewModel @JvmOverloads constructor(
     application: Application,
     coordinator: CaptureCoordinator? = null
 ) : AndroidViewModel(application) {

@@ -29,6 +29,9 @@ import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.DynamicRange
+import androidx.camera.core.ExperimentalCameraInfo
+import androidx.camera.core.ExperimentalImageCaptureOutputFormat
+import androidx.camera.core.ExperimentalZeroShutterLag
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
@@ -116,7 +119,12 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-@OptIn(ExperimentalCamera2Interop::class)
+@OptIn(
+    ExperimentalCamera2Interop::class,
+    ExperimentalCameraInfo::class,
+    ExperimentalZeroShutterLag::class,
+    ExperimentalImageCaptureOutputFormat::class
+)
 @Composable
 fun CameraScreen(
     viewModel: CameraViewModel,

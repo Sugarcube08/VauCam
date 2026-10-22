@@ -1,5 +1,7 @@
 package org.vaucam.ui.components.controls
 
+import androidx.annotation.OptIn
+import androidx.camera.core.ExperimentalZeroShutterLag
 import androidx.camera.core.ImageCapture
 import androidx.camera.video.Quality
 import androidx.compose.foundation.background
@@ -46,6 +48,7 @@ import org.vaucam.viewmodel.CameraUiState
 import org.vaucam.viewmodel.FpsMode
 import org.vaucam.viewmodel.TimerMode
 
+@OptIn(ExperimentalZeroShutterLag::class)
 @Composable
 fun TopBarControls(
     uiState: CameraUiState,
