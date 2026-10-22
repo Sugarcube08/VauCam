@@ -24,7 +24,7 @@ interface CaptureDao {
 
     @Query("""
         SELECT * FROM capture_records
-        WHERE state IN ('CAPTURED', 'BACKUP_PENDING', 'BACKUP_FAILED')
+        WHERE state IN ('CAPTURED', 'BACKUP_PENDING')
           AND original_uri IS NOT NULL
         ORDER BY created_at ASC
     """)
