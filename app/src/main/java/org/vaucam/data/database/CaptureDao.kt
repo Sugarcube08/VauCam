@@ -22,6 +22,27 @@ interface CaptureDao {
     @Query("SELECT * FROM capture_records WHERE original_uri = :uri LIMIT 1")
     suspend fun getByOriginalUri(uri: String): CaptureRecordEntity?
 
+    /**
+     * Finds a durable intent whose callback was lost before its MediaStore URI was persisted.
+     * The file's timestamp-based name is used by the reconciliation worker to establish a
+     * narrow time window; ambiguous older intents are never claimed.
+     */
+    @Query("""
+        SELECT * FROM capture_records
+        WHERE media_type = :mediaType
+          AND original_uri IS NULL
+          AND state IN ('CAPTURE_REQUESTED', 'RECOVERY_REQUIRED')
+          AND created_at BETWEEN :windowStart AND :windowEnd
+        ORDER BY ABS(created_at - :capturedAt) ASC
+        LIMIT 1
+    """)
+    suspend fun findOrphanCaptureIntent(
+        mediaType: MediaType,
+        windowStart: Long,
+        windowEnd: Long,
+        capturedAt: Long
+    ): CaptureRecordEntity?
+
     @Query("""
         SELECT * FROM capture_records
         WHERE state IN ('CAPTURED', 'BACKUP_PENDING')
