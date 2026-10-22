@@ -183,7 +183,7 @@ fun PermissionDeniedScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Surface(
-            color = Color.Yellow.copy(alpha = 0.15f),
+            color = VauCamBrand.Accent.copy(alpha = 0.15f),
             shape = CircleShape,
             modifier = Modifier.size(84.dp)
         ) {
