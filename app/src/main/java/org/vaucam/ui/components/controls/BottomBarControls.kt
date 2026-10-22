@@ -213,7 +213,7 @@ fun BottomBarControls(
                     Text(
                         text = mode.label,
                         color = if (isSelected) {
-                            VauCamBrand.Accent
+                            VauCamBrand.Ink
                         } else if (uiState.isRecording) {
                             Color.White.copy(alpha = 0.35f)
                         } else {
