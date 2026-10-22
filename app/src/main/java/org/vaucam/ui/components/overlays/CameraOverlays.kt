@@ -1,5 +1,6 @@
 package org.vaucam.ui.components.overlays
 
+import org.vaucam.ui.theme.VauCamBrand
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.compose.animation.core.RepeatMode
@@ -81,7 +82,7 @@ fun RecordingTimerPill(
             .background(Color.Black.copy(alpha = 0.7f), CircleShape)
             .border(
                 width = 1.dp,
-                color = if (isPaused) Color.Yellow else Color.Red.copy(alpha = 0.8f),
+                color = if (isPaused) VauCamBrand.Accent else Color.Red.copy(alpha = 0.8f),
                 shape = CircleShape
             )
             .padding(horizontal = 14.dp, vertical = 6.dp)
@@ -91,7 +92,7 @@ fun RecordingTimerPill(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
-                color = if (isPaused) Color.Yellow else Color.Red,
+                color = if (isPaused) VauCamBrand.Accent else Color.Red,
                 shape = CircleShape,
                 modifier = Modifier
                     .size(10.dp)
@@ -122,12 +123,12 @@ fun CountdownTimerOverlay(
             modifier = Modifier
                 .size(120.dp)
                 .background(Color.Black.copy(alpha = 0.55f), CircleShape)
-                .border(3.dp, Color.Yellow, CircleShape),
+                .border(3.dp, VauCamBrand.Accent, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = seconds.toString(),
-                color = Color.Yellow,
+                color = VauCamBrand.Accent,
                 fontSize = 56.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -181,8 +182,8 @@ fun NightSightActivePill(
 
     Box(
         modifier = modifier
-            .background(Color.Yellow.copy(alpha = 0.2f), CircleShape)
-            .border(1.dp, Color.Yellow, CircleShape)
+            .background(VauCamBrand.Accent.copy(alpha = 0.2f), CircleShape)
+            .border(1.dp, VauCamBrand.Accent, CircleShape)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -193,12 +194,12 @@ fun NightSightActivePill(
             Icon(
                 imageVector = Icons.Default.NightsStay,
                 contentDescription = "Night Mode Active",
-                tint = Color.Yellow,
+                tint = VauCamBrand.Accent,
                 modifier = Modifier.size(16.dp)
             )
             Text(
                 text = "NIGHT SIGHT ACTIVE",
-                color = Color.Yellow,
+                color = VauCamBrand.Accent,
                 style = MaterialTheme.typography.labelSmall
             )
         }
@@ -224,7 +225,7 @@ fun HoldStillProgressOverlay(
         ) {
             CircularProgressIndicator(
                 progress = (currentProgress.toFloat() / 100f).coerceIn(0f, 1f),
-                color = Color.Yellow,
+                color = VauCamBrand.Accent,
                 strokeWidth = 6.dp,
                 modifier = Modifier.size(80.dp)
             )
@@ -236,7 +237,7 @@ fun HoldStillProgressOverlay(
             )
             Text(
                 text = "$currentProgress%",
-                color = Color.Yellow,
+                color = VauCamBrand.Accent,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 4.dp)
             )
@@ -261,7 +262,7 @@ fun HistogramOverlay(
     ) {
         Text(
             text = "LUMA HISTOGRAM",
-            color = Color.Yellow,
+            color = VauCamBrand.Accent,
             fontSize = 9.sp,
             fontWeight = FontWeight.SemiBold
         )
@@ -292,11 +293,11 @@ fun HistogramOverlay(
 
             drawPath(
                 path = fillPath,
-                color = Color.Yellow.copy(alpha = 0.3f)
+                color = VauCamBrand.Accent.copy(alpha = 0.3f)
             )
             drawPath(
                 path = strokePath,
-                color = Color.Yellow,
+                color = VauCamBrand.Accent,
                 style = Stroke(width = 1.5.dp.toPx())
             )
         }
