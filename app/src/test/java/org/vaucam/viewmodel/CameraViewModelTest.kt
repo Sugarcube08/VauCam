@@ -1,6 +1,7 @@
 package org.vaucam.viewmodel
 
 import android.app.Application
+import android.content.SharedPreferences
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import org.junit.Assert.assertEquals

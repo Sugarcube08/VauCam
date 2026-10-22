@@ -200,4 +200,27 @@ class BackupRepositoryTest {
         assertEquals(success.sha256, finalRecord?.protectedSha256)
     }
 
+
+    @Test
+    fun `protected photo copy receives extension when MediaStore display name omits it`() = runBlocking {
+        val record = repository.registerCaptureIntent(MediaType.PHOTO)
+        val originalFile = File(externalMediaDir, "extensionless-source")
+        originalFile.writeBytes("extensionless-photo".toByteArray())
+
+        repository.confirmCapture(
+            captureId = record.id,
+            originalUri = Uri.fromFile(originalFile),
+            originalPath = originalFile.absolutePath,
+            sizeBytes = originalFile.length(),
+            mimeType = "image/jpeg",
+            displayName = "2026-10-22-120000-000"
+        )
+
+        val result = repository.executeBackup(record.id)
+        assertTrue("Backup should succeed", result is BackupExecutionResult.Success)
+        assertTrue(
+            "Protected photo should have a .jpg extension",
+            (result as BackupExecutionResult.Success).protectedFile.name.endsWith(".jpg")
+        )
+    }
 }
