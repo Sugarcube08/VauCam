@@ -29,7 +29,7 @@ class CameraViewModelTest {
         // AndroidViewModel's viewModelScope uses Dispatchers.Main; install a deterministic
         // test dispatcher for local JVM tests where the Android Main looper is unavailable.
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        viewModel = CameraViewModel(RuntimeEnvironment.getApplication<Application>())
+        viewModel = CameraViewModel(RuntimeEnvironment.getApplication())
     }
 
     @After
