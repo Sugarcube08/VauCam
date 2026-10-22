@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vaucam_ink">#08090B</color>
+    <color name="vaucam_surface">#17191D</color>
+    <color name="vaucam_surface_elevated">#24272D</color>
+    <color name="vaucam_accent">#FFD45A</color>
+    <color name="vaucam_accent_pressed">#E6B83F</color>
+    <color name="vaucam_text_primary">#F7F7F5</color>
+    <color name="vaucam_text_secondary">#A8ABB2</color>
+</resources>
